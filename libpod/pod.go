@@ -6,6 +6,7 @@ import (
 
 	"github.com/containers/podman/v3/libpod/define"
 	"github.com/containers/podman/v3/libpod/lock"
+	"github.com/containers/podman/v3/pkg/specgen"
 	"github.com/cri-o/ocicni/pkg/ocicni"
 	"github.com/pkg/errors"
 )
@@ -110,6 +111,7 @@ type InfraContainerConfig struct {
 	InfraCommand       []string             `json:"infraCommand,omitempty"`
 	Slirp4netns        bool                 `json:"slirp4netns,omitempty"`
 	NetworkOptions     map[string][]string  `json:"network_options,omitempty"`
+	Userns             specgen.Namespace    `json:"userns,omitempty"`
 }
 
 // ID retrieves the pod's ID
@@ -199,6 +201,11 @@ func (p *Pod) SharesCgroup() bool {
 // Hostname returns the hostname of the pod.
 func (p *Pod) Hostname() string {
 	return p.config.Hostname
+}
+
+// UserNS returns the userns of the infracontainer in the pod.
+func (p *Pod) UserNS() specgen.Namespace {
+	return p.config.InfraContainer.Userns
 }
 
 // CgroupPath returns the path to the pod's CGroup

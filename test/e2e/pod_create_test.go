@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -513,6 +514,70 @@ ENTRYPOINT ["sleep","99999"]
 		create := podmanTest.Podman([]string{"pod", "create", "--infra-image", iid})
 		create.WaitWithDefaultTimeout()
 		Expect(create.ExitCode()).To(BeZero())
+	})
+
+	It("podman pod create with --userns=keep-id", func() {
+		podName := "testPod"
+		podCreate := podmanTest.Podman([]string{"pod", "create", "--userns", "keep-id", "--name", podName})
+		podCreate.WaitWithDefaultTimeout()
+		Expect(podCreate.ExitCode()).To(Equal(0))
+
+		session := podmanTest.Podman([]string{"run", "--pod", podName, ALPINE, "id", "-u"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+		uid := fmt.Sprintf("%d", os.Geteuid())
+		ok, _ := session.GrepString(uid)
+		Expect(ok).To(BeTrue())
+
+		// Check passwd
+		session = podmanTest.Podman([]string{"run", "--pod", podName, ALPINE, "id", "-un"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+		u, err := user.Current()
+		Expect(err).To(BeNil())
+		ok, _ = session.GrepString(u.Name)
+		Expect(ok).To(BeTrue())
+
+		// root owns /usr
+		session = podmanTest.Podman([]string{"run", "--pod", podName, ALPINE, "stat", "-c%u", "/usr"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+		Expect(session.OutputToString()).To(Equal("0"))
+
+		// fail if --pod and --userns set together
+		session = podmanTest.Podman([]string{"run", "--pod", podName, "--userns", "keep-id", ALPINE, "id", "-u"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(1))
+	})
+
+	It("podman pod create with --userns=keep-id can add users", func() {
+		if os.Geteuid() == 0 {
+			Skip("Test only runs without root")
+		}
+
+		userName := os.Getenv("USER")
+		if userName == "" {
+			Skip("Can't complete test if no username available")
+		}
+
+		podName := "testPod"
+		podCreate := podmanTest.Podman([]string{"pod", "create", "--userns", "keep-id", "--name", podName})
+		podCreate.WaitWithDefaultTimeout()
+		Expect(podCreate.ExitCode()).To(Equal(0))
+
+		ctrName := "ctr-name"
+		session := podmanTest.Podman([]string{"run", "--pod", podName, "--user", "root:root", "-d", "--stop-signal", "9", "--name", ctrName, fedoraMinimal, "sleep", "600"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(0))
+
+		exec1 := podmanTest.Podman([]string{"exec", "-t", "-i", ctrName, "cat", "/etc/passwd"})
+		exec1.WaitWithDefaultTimeout()
+		Expect(exec1.ExitCode()).To(Equal(0))
+		Expect(exec1.OutputToString()).To(ContainSubstring(userName))
+
+		exec2 := podmanTest.Podman([]string{"exec", "-t", "-i", ctrName, "useradd", "testuser"})
+		exec2.WaitWithDefaultTimeout()
+		Expect(exec2.ExitCode()).To(Equal(0))
 	})
 
 })

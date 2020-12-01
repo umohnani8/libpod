@@ -163,6 +163,9 @@ func createInit(c *cobra.Command) error {
 	if c.Flag("cpu-quota").Changed && c.Flag("cpus").Changed {
 		return errors.Errorf("--cpu-quota and --cpus cannot be set together")
 	}
+	if c.Flag("pod").Changed && !strings.HasPrefix(c.Flag("pod").Value.String(), "new:") && c.Flag("userns").Changed {
+		return errors.Errorf("--userns and --pod cannot be set together")
+	}
 
 	noHosts, err := c.Flags().GetBool("no-hosts")
 	if err != nil {
@@ -310,12 +313,19 @@ func createPodIfNecessary(s *specgen.SpecGenerator, netOpts *entities.NetOptions
 	if len(podName) < 1 {
 		return nil, errors.Errorf("new pod name must be at least one character")
 	}
+
+	userns, err := specgen.ParseUserNamespace(cliVals.UserNS)
+	if err != nil {
+		return nil, err
+	}
+
 	createOptions := entities.PodCreateOptions{
 		Name:          podName,
 		Infra:         true,
 		Net:           netOpts,
 		CreateCommand: os.Args,
 		Hostname:      s.ContainerBasicConfig.Hostname,
+		Userns:        userns,
 	}
 	// Unset config values we passed to the pod to prevent them being used twice for the container and pod.
 	s.ContainerBasicConfig.Hostname = ""

@@ -1,6 +1,7 @@
 package libpod
 
 import (
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/containers/podman/v3/libpod/events"
 	"github.com/containers/podman/v3/pkg/namespaces"
 	"github.com/containers/podman/v3/pkg/rootless"
+	"github.com/containers/podman/v3/pkg/specgen"
 	"github.com/containers/podman/v3/pkg/util"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/idtools"
@@ -940,15 +942,18 @@ func WithUserNSFrom(nsCtr *Container) CtrCreateOption {
 
 		ctr.config.UserNsCtr = nsCtr.ID()
 		ctr.config.IDMappings = nsCtr.config.IDMappings
+		fmt.Println("---idmapping options---:", ctr.config.IDMappings)
 
 		g := generate.Generator{Config: ctr.config.Spec}
 
 		g.ClearLinuxUIDMappings()
 		for _, uidmap := range nsCtr.config.IDMappings.UIDMap {
+			fmt.Println("---uidmap---:", uidmap.ContainerID, uidmap.HostID, uidmap.Size)
 			g.AddLinuxUIDMapping(uint32(uidmap.HostID), uint32(uidmap.ContainerID), uint32(uidmap.Size))
 		}
 		g.ClearLinuxGIDMappings()
 		for _, gidmap := range nsCtr.config.IDMappings.GIDMap {
+			fmt.Println("---giddmap---:", gidmap.ContainerID, gidmap.HostID, gidmap.Size)
 			g.AddLinuxGIDMapping(uint32(gidmap.HostID), uint32(gidmap.ContainerID), uint32(gidmap.Size))
 		}
 		ctr.config.IDMappings = nsCtr.config.IDMappings
@@ -2339,6 +2344,20 @@ func WithVolatile() CtrCreateOption {
 		}
 
 		ctr.config.Volatile = true
+
+		return nil
+	}
+}
+
+// WithInfraUserns sets the userns for the infra container in a pod.
+func WithInfraUserns(userns specgen.Namespace) PodCreateOption {
+	return func(pod *Pod) error {
+		if pod.valid {
+			return define.ErrPodFinalized
+		}
+
+		pod.config.InfraContainer.Userns = userns
+
 		return nil
 	}
 }

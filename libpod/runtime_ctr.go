@@ -2,6 +2,7 @@ package libpod
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -455,12 +456,15 @@ func (r *Runtime) setupContainer(ctx context.Context, ctr *Container) (_ *Contai
 		defer pod.lock.Unlock()
 
 		if err := r.state.AddContainerToPod(pod, ctr); err != nil {
+			fmt.Println("---meow----")
 			return nil, err
 		}
 	} else if err := r.state.AddContainer(ctr); err != nil {
+		fmt.Println("---grrr----s")
 		return nil, err
 	}
 	ctr.newContainerEvent(events.Create)
+	fmt.Println("----sigh----")
 	return ctr, nil
 }
 

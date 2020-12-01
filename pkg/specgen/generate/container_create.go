@@ -2,6 +2,7 @@ package generate
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,6 +36,8 @@ func MakeContainer(ctx context.Context, rt *libpod.Runtime, s *specgen.SpecGener
 		if err != nil {
 			return nil, errors.Wrapf(err, "error retrieving pod %s", s.Pod)
 		}
+		s.UserNS = pod.UserNS()
+		fmt.Println("---pod userns---:", s.UserNS.NSMode)
 	}
 
 	// Set defaults for unset namespaces
@@ -134,12 +137,14 @@ func MakeContainer(ctx context.Context, rt *libpod.Runtime, s *specgen.SpecGener
 	}
 	options = append(options, opts...)
 
+	fmt.Println("---1111------")
 	exitCommandArgs, err := CreateExitCommandArgs(rt.StorageConfig(), rtc, logrus.IsLevelEnabled(logrus.DebugLevel), s.Remove, false)
 	if err != nil {
 		return nil, err
 	}
 	options = append(options, libpod.WithExitCommand(exitCommandArgs))
 
+	fmt.Println("---22------")
 	if len(s.Aliases) > 0 {
 		options = append(options, libpod.WithNetworkAliases(s.Aliases))
 	}
@@ -149,11 +154,16 @@ func MakeContainer(ctx context.Context, rt *libpod.Runtime, s *specgen.SpecGener
 		options = append(options, opts...)
 	}
 
+	fmt.Println("----3333------")
 	runtimeSpec, err := SpecGenToOCI(ctx, s, rt, rtc, newImage, finalMounts, pod, command)
 	if err != nil {
 		return nil, err
 	}
-	return rt.NewContainer(ctx, runtimeSpec, options...)
+
+	fmt.Println(("----4444------"))
+	a, err := rt.NewContainer(ctx, runtimeSpec, options...)
+	fmt.Println("---5555-----")
+	return a, err
 }
 
 func extractCDIDevices(s *specgen.SpecGenerator) []libpod.CtrCreateOption {
@@ -253,6 +263,12 @@ func createContainerOptions(ctx context.Context, rt *libpod.Runtime, s *specgen.
 	if pod != nil {
 		logrus.Debugf("adding container to pod %s", pod.Name())
 		options = append(options, rt.WithPod(pod))
+		infractr, err := pod.InfraContainer()
+		if err != nil {
+			return nil, err
+		}
+		fmt.Println("----infra container---:", infractr.User())
+		options = append(options, libpod.WithUserNSFrom(infractr))
 	}
 	destinations := []string{}
 	// Take all mount and named volume destinations.

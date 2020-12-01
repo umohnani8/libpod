@@ -9,7 +9,9 @@ import (
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/podman/v3/libpod/define"
 	"github.com/containers/podman/v3/pkg/rootless"
+	"github.com/containers/podman/v3/pkg/specgen"
 	"github.com/containers/podman/v3/pkg/util"
+	"github.com/containers/storage"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/runtime-tools/generate"
@@ -147,10 +149,26 @@ func (r *Runtime) makeInfraContainer(ctx context.Context, p *Pod, imgName, rawIm
 		}
 	}
 
+	for _, ctl := range r.config.Containers.DefaultSysctls {
+		sysctl := strings.SplitN(ctl, "=", 2)
+		if len(sysctl) < 2 {
+			return nil, errors.Errorf("invalid default sysctl %s", ctl)
+		}
+		g.AddLinuxSysctl(sysctl[0], sysctl[1])
+	}
+
 	g.SetRootReadonly(true)
 	g.SetProcessArgs(infraCtrCommand)
 
 	logrus.Debugf("Using %q as infra container command", infraCtrCommand)
+
+	user, err := specgen.SetupUserNS(&storage.IDMappingOptions{}, p.config.InfraContainer.Userns, &g)
+	if err != nil {
+		return nil, err
+	}
+	if user != "" {
+		options = append(options, WithUser(user))
+	}
 
 	g.RemoveMount("/dev/shm")
 	if isRootless {
@@ -197,6 +215,7 @@ func (r *Runtime) makeInfraContainer(ctx context.Context, p *Pod, imgName, rawIm
 	options = append(options, WithRootFSFromImage(imgID, imgName, rawImageName))
 	options = append(options, WithName(containerName))
 	options = append(options, withIsInfra())
+	// options = append(options, WithInfraUserns(p.config.InfraContainer.Userns))
 	if len(p.config.InfraContainer.ConmonPidFile) > 0 {
 		options = append(options, WithConmonPidFile(p.config.InfraContainer.ConmonPidFile))
 	}
@@ -236,3 +255,44 @@ func (r *Runtime) createInfraContainer(ctx context.Context, p *Pod) (*Container,
 
 	return r.makeInfraContainer(ctx, p, imageName, r.config.Engine.InfraImage, imageID, data.Config)
 }
+
+// func setupUserNS(userns specgen.Namespace, g *generate.Generator) (user string, err error) {
+// 	// User
+// 	switch userns.NSMode {
+// 	case specgen.Path:
+// 		if _, err := os.Stat(userns.Value); err != nil {
+// 			return user, errors.Wrap(err, "cannot find specified user namespace path")
+// 		}
+// 		if err := g.AddOrReplaceLinuxNamespace(string(spec.UserNamespace), userns.Value); err != nil {
+// 			return user, err
+// 		}
+// 		// runc complains if no mapping is specified, even if we join another ns. So provide a dummy mapping
+// 		g.AddLinuxUIDMapping(uint32(0), uint32(0), uint32(1))
+// 		g.AddLinuxGIDMapping(uint32(0), uint32(0), uint32(1))
+// 	case specgen.Host:
+// 		if err := g.RemoveLinuxNamespace(string(spec.UserNamespace)); err != nil {
+// 			return user, err
+// 		}
+// 	case specgen.KeepID:
+// 		mappings, uid, gid, err := util.GetKeepIDMapping()
+// 		if err != nil {
+// 			return user, err
+// 		}
+// 		if err := g.AddOrReplaceLinuxNamespace(string(spec.UserNamespace), ""); err != nil {
+// 			return user, err
+// 		}
+// 		for _, uidmap := range mappings.UIDMap {
+// 			g.AddLinuxUIDMapping(uint32(uidmap.HostID), uint32(uidmap.ContainerID), uint32(uidmap.Size))
+// 		}
+// 		for _, gidmap := range mappings.GIDMap {
+// 			g.AddLinuxGIDMapping(uint32(gidmap.HostID), uint32(gidmap.ContainerID), uint32(gidmap.Size))
+// 		}
+// 		g.SetProcessUID(uint32(uid))
+// 		g.SetProcessGID(uint32(gid))
+// 		user = fmt.Sprintf("%d:%d", uid, gid)
+// 		// default:
+// 		// 	return user, errors.Errorf("invalid userns mode %q", userns.NSMode)
+// 	}
+
+// 	return user, nil
+// }

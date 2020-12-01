@@ -91,6 +91,8 @@ type InspectPodInfraConfig struct {
 	Networks []string
 	// NetworkOptions are additional options for each network
 	NetworkOptions map[string][]string
+	// UserNS is the usernamespace that all the containers in the pod will join.
+	UserNS string
 }
 
 // InspectPodContainerInfo contains information on a container in a pod.
