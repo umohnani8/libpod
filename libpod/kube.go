@@ -96,24 +96,17 @@ func (p *Pod) GenerateForKube(ctx context.Context, getService bool) (*v1.Pod, []
 		return nil, servicePorts, err
 	}
 	pod.Spec.HostAliases = extraHost
-
-	// vendor/k8s.io/api/core/v1/types.go: v1.Container cannot save restartPolicy
-	// so set it at here
-	for _, ctr := range allContainers {
-		if !ctr.IsInfra() {
-			switch ctr.config.RestartPolicy {
-			case define.RestartPolicyAlways:
-				pod.Spec.RestartPolicy = v1.RestartPolicyAlways
-			case define.RestartPolicyOnFailure:
-				pod.Spec.RestartPolicy = v1.RestartPolicyOnFailure
-			case define.RestartPolicyNo:
-				pod.Spec.RestartPolicy = v1.RestartPolicyNever
-			default: // some pod create from cmdline, such as "", so set it to "" as k8s automatically defaults to always
-				pod.Spec.RestartPolicy = ""
-			}
-			break
-		}
+	switch p.config.RestartPolicy {
+	case define.RestartPolicyNo:
+		pod.Spec.RestartPolicy = v1.RestartPolicyNever
+	case define.RestartPolicyAlways:
+		pod.Spec.RestartPolicy = v1.RestartPolicyAlways
+	case define.RestartPolicyOnFailure:
+		pod.Spec.RestartPolicy = v1.RestartPolicyOnFailure
+	default: // some pod create from cmdline, such as "" - set it to "" and let k8s handle the defaults
+		pod.Spec.RestartPolicy = ""
 	}
+	fmt.Println("---restart policy----:", pod.Spec.RestartPolicy)
 
 	if p.SharesPID() {
 		// unfortunately, go doesn't have a nice way to specify a pointer to a bool
@@ -598,7 +591,7 @@ func simplePodWithV1Containers(ctx context.Context, ctrs []*Container, getServic
 	podDNS := v1.PodDNSConfig{}
 	kubeAnnotations := make(map[string]string)
 	ctrNames := make([]string, 0, len(ctrs))
-	var hostname string
+	var hostname, restartPolicy string
 	for _, ctr := range ctrs {
 		ctrNames = append(ctrNames, removeUnderscores(ctr.Name()))
 		for k, v := range ctr.config.Spec.Annotations {
@@ -622,6 +615,12 @@ func simplePodWithV1Containers(ctx context.Context, ctrs []*Container, getServic
 				hostname = ctr.Hostname()
 			}
 		}
+
+		// Use the restart policy of the first non-init container
+		if !isInit && restartPolicy == "" {
+			restartPolicy = ctr.config.RestartPolicy
+		}
+		fmt.Println("--restart policy----")
 
 		if ctr.config.Spec.Process != nil {
 			var ulimitArr []string
@@ -700,7 +699,7 @@ func simplePodWithV1Containers(ctx context.Context, ctrs []*Container, getServic
 		podName += "-pod"
 	}
 
-	return newPodObject(
+	pod := newPodObject(
 		podName,
 		kubeAnnotations,
 		kubeInitCtrs,
@@ -709,7 +708,22 @@ func simplePodWithV1Containers(ctx context.Context, ctrs []*Container, getServic
 		&podDNS,
 		hostNetwork,
 		hostUsers,
-		hostname), nil
+		hostname)
+
+	// Set the pod's restart policy
+	switch restartPolicy {
+	case define.RestartPolicyNo:
+		pod.Spec.RestartPolicy = v1.RestartPolicyNever
+	case define.RestartPolicyAlways:
+		pod.Spec.RestartPolicy = v1.RestartPolicyAlways
+	case define.RestartPolicyOnFailure:
+		pod.Spec.RestartPolicy = v1.RestartPolicyOnFailure
+	default: // some pod create from cmdline, such as "" - set it to "" and let k8s handle the defaults
+		pod.Spec.RestartPolicy = ""
+	}
+	fmt.Println("---ctr trstart policy----:", pod.Spec.RestartPolicy)
+
+	return pod, nil
 }
 
 // containerToV1Container converts information we know about a libpod container
