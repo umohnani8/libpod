@@ -145,6 +145,7 @@ func ListContainerBatch(rt *libpod.Runtime, ctr *libpod.Container, opts entities
 		portMappings                            []libnetworkTypes.PortMapping
 		networks                                []string
 		healthStatus                            string
+		restartCount                            uint
 	)
 
 	batchErr := ctr.Batch(func(c *libpod.Container) error {
@@ -193,6 +194,11 @@ func ListContainerBatch(rt *libpod.Runtime, ctr *libpod.Container, opts entities
 			return err
 		}
 
+		restartCount, err = c.RestartCount()
+		if err != nil {
+			return err
+		}
+
 		if !opts.Size && !opts.Namespace {
 			return nil
 		}
@@ -230,27 +236,28 @@ func ListContainerBatch(rt *libpod.Runtime, ctr *libpod.Container, opts entities
 	}
 
 	ps := entities.ListContainer{
-		AutoRemove: ctr.AutoRemove(),
-		Command:    conConfig.Command,
-		Created:    conConfig.CreatedTime,
-		Exited:     exited,
-		ExitCode:   exitCode,
-		ExitedAt:   exitedTime.Unix(),
-		ID:         conConfig.ID,
-		Image:      conConfig.RootfsImageName,
-		ImageID:    conConfig.RootfsImageID,
-		IsInfra:    conConfig.IsInfra,
-		Labels:     conConfig.Labels,
-		Mounts:     ctr.UserVolumes(),
-		Names:      []string{conConfig.Name},
-		Networks:   networks,
-		Pid:        pid,
-		Pod:        conConfig.Pod,
-		Ports:      portMappings,
-		Size:       size,
-		StartedAt:  startedTime.Unix(),
-		State:      conState.String(),
-		Status:     healthStatus,
+		AutoRemove:   ctr.AutoRemove(),
+		Command:      conConfig.Command,
+		Created:      conConfig.CreatedTime,
+		Exited:       exited,
+		ExitCode:     exitCode,
+		ExitedAt:     exitedTime.Unix(),
+		ID:           conConfig.ID,
+		Image:        conConfig.RootfsImageName,
+		ImageID:      conConfig.RootfsImageID,
+		IsInfra:      conConfig.IsInfra,
+		Labels:       conConfig.Labels,
+		Mounts:       ctr.UserVolumes(),
+		Names:        []string{conConfig.Name},
+		Networks:     networks,
+		Pid:          pid,
+		Pod:          conConfig.Pod,
+		Ports:        portMappings,
+		Size:         size,
+		StartedAt:    startedTime.Unix(),
+		State:        conState.String(),
+		Status:       healthStatus,
+		RestartCount: restartCount,
 	}
 	if opts.Pod && len(conConfig.Pod) > 0 {
 		podName, err := rt.GetPodName(conConfig.Pod)

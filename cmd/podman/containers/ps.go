@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -300,6 +301,7 @@ func createPsOut() ([]map[string]string, string) {
 		"PIDNS":        "pidns",
 		"Pod":          "pod id",
 		"PodName":      "podname", // undo camelcase space break
+		"Restarts":     "restarts",
 		"RunningFor":   "running for",
 		"UTS":          "uts",
 		"User":         "userns",
@@ -380,6 +382,10 @@ func (l psReporter) Status() string {
 		return l.State() + " (" + hc + ")"
 	}
 	return l.State()
+}
+
+func (l psReporter) Restarts() string {
+	return strconv.Itoa(int(l.ListContainer.RestartCount))
 }
 
 func (l psReporter) RunningFor() string {
