@@ -106,6 +106,7 @@ metadata.labels.app        | =  | ${pname}
 metadata.name              | =  | ${pname}
 
 spec.hostname                              | =  | null
+spec.restartPolicy                         | =  | [\"Always\"]
 
 spec.containers[0].command                 | =  | [\"top\"]
 spec.containers[0].image                   | =  | $IMAGE

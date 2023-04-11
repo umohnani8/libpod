@@ -528,18 +528,20 @@ var _ = Describe("Podman kube generate", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
-	It("podman generate kube on pod with restartPolicy", func() {
+	It("podman generate kube on pod with restartPolicy set for container in a pod", func() {
+		//TODO: v5.0 - change/remove test once we block --restart on container when it is in a pod
 		// podName,  set,  expect
 		testSli := [][]string{
-			{"testPod1", "", ""}, // some pod create from cmdline, so set it to an empty string and let k8s default it to Always
+			{"testPod1", "", "Always"}, // some pod create from cmdline, so set it to an empty string and let k8s default it to Always
 			{"testPod2", "always", "Always"},
 			{"testPod3", "on-failure", "OnFailure"},
 			{"testPod4", "no", "Never"},
+			{"testPod5", "never", "Never"},
 		}
 
 		for k, v := range testSli {
 			podName := v[0]
-			podSession := podmanTest.Podman([]string{"pod", "create", "--name", podName})
+			podSession := podmanTest.Podman([]string{"pod", "create", "--restart", v[1], podName})
 			podSession.WaitWithDefaultTimeout()
 			Expect(podSession).Should(Exit(0))
 
@@ -558,6 +560,67 @@ var _ = Describe("Podman kube generate", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(string(pod.Spec.RestartPolicy)).To(Equal(v[2]))
+		}
+	})
+
+	It("podman generate kube on pod with restartPolicy", func() {
+		// podName,  set,  expect
+		testSli := [][]string{
+			{"testPod1", "", "Always"}, // restartPolicy for pod defaults to Always (same as k8s)
+			{"testPod2", "always", "Always"},
+			{"testPod3", "on-failure", "OnFailure"},
+			{"testPod4", "no", "Never"},
+			{"testPod5", "never", "Never"},
+		}
+
+		for k, v := range testSli {
+			podName := v[0]
+			podSession := podmanTest.Podman([]string{"pod", "create", "--restart", v[1], podName})
+			podSession.WaitWithDefaultTimeout()
+			Expect(podSession).Should(Exit(0))
+
+			ctrName := "ctr" + strconv.Itoa(k)
+			ctr1Session := podmanTest.Podman([]string{"create", "--name", ctrName, "--pod", podName, ALPINE, "top"})
+			ctr1Session.WaitWithDefaultTimeout()
+			Expect(ctr1Session).Should(Exit(0))
+
+			kube := podmanTest.Podman([]string{"generate", "kube", podName})
+			kube.WaitWithDefaultTimeout()
+			Expect(kube).Should(Exit(0))
+
+			pod := new(v1.Pod)
+			err := yaml.Unmarshal(kube.Out.Contents(), pod)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(string(pod.Spec.RestartPolicy)).To(Equal(v[2]))
+		}
+	})
+
+	It("podman generate kube on ctr with restartPolicy", func() {
+		// podName,  set,  expect
+		testSli := [][]string{
+			{"", ""}, // some ctr created from cmdline, set it to "" and let k8s default it to Always
+			{"always", "Always"},
+			{"on-failure", "OnFailure"},
+			{"no", "Never"},
+			{"never", "Never"},
+		}
+
+		for k, v := range testSli {
+			ctrName := "ctr" + strconv.Itoa(k)
+			ctrSession := podmanTest.Podman([]string{"create", "--restart", v[0], "--name", ctrName, ALPINE, "top"})
+			ctrSession.WaitWithDefaultTimeout()
+			Expect(ctrSession).Should(Exit(0))
+
+			kube := podmanTest.Podman([]string{"generate", "kube", ctrName})
+			kube.WaitWithDefaultTimeout()
+			Expect(kube).Should(Exit(0))
+
+			pod := new(v1.Pod)
+			err := yaml.Unmarshal(kube.Out.Contents(), pod)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(string(pod.Spec.RestartPolicy)).To(Equal(v[1]))
 		}
 	})
 
