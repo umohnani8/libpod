@@ -416,6 +416,10 @@ type EngineConfig struct {
 	// ServiceDestinations mapped by service Names
 	ServiceDestinations map[string]Destination `toml:"service_destinations,omitempty"`
 
+	Farms map[string][]string `toml:"farms,omitempty"`
+
+	DefaultFarm string `toml:"default_farm,omitempty"`
+
 	// SSHConfig contains the ssh config file path if not the default
 	SSHConfig string `toml:"ssh_config,omitempty"`
 

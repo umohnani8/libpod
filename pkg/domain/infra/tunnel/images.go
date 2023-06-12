@@ -412,3 +412,43 @@ func (ir *ImageEngine) Scp(ctx context.Context, src, dst string, parentFlags []s
 
 	return nil
 }
+
+func (ir *ImageEngine) Driver(ctx context.Context) string {
+	return ""
+}
+
+func (ir *ImageEngine) Name(ctx context.Context) string {
+	return ""
+}
+
+func (ir *ImageEngine) Status(ctx context.Context) error {
+	return nil
+}
+
+func (ir *ImageEngine) Info(ctx context.Context, options entities.InfoOptions) (*entities.Info, error) {
+	return nil, nil
+}
+
+func (ir *ImageEngine) NativePlatforms(ctx context.Context, options entities.InfoOptions) ([]string, error) {
+	return []string{}, nil
+}
+
+func (ir *ImageEngine) EmulatedPlatforms(ctx context.Context, options entities.InfoOptions) ([]string, error) {
+	return []string{}, nil
+}
+
+func (ir *ImageEngine) BuildfarmBuild(ctx context.Context, reference string, containerFiles []string, options entities.BuildOptions) (*entities.BuildReport, error) {
+	return nil, nil
+}
+
+func (ir *ImageEngine) PullToFile(ctx context.Context, options entities.PullToFileOptions) (reference string, err error) {
+	return "", nil
+}
+
+func (ir *ImageEngine) PullToLocal(ctx context.Context, options entities.PullToLocalOptions) (reference string, err error) {
+	return "", nil
+}
+
+func (ir *ImageEngine) Done(ctx context.Context) error {
+	return nil
+}

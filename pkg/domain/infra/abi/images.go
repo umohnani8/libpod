@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -13,8 +14,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
+	"github.com/containers/buildah"
+	"github.com/containers/buildah/define"
+	"github.com/containers/buildah/pkg/parse"
 	"github.com/containers/common/libimage"
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/common/pkg/ssh"
@@ -23,18 +28,22 @@ import (
 	"github.com/containers/image/v5/manifest"
 	"github.com/containers/image/v5/pkg/compression"
 	"github.com/containers/image/v5/signature"
+	istorage "github.com/containers/image/v5/storage"
 	"github.com/containers/image/v5/transports"
 	"github.com/containers/image/v5/transports/alltransports"
 	"github.com/containers/podman/v4/libpod/define"
 	"github.com/containers/podman/v4/pkg/domain/entities"
 	"github.com/containers/podman/v4/pkg/domain/entities/reports"
+	"github.com/containers/podman/v4/pkg/domain/infra"
 	domainUtils "github.com/containers/podman/v4/pkg/domain/utils"
 	"github.com/containers/podman/v4/pkg/errorhandling"
 	"github.com/containers/podman/v4/pkg/rootless"
 	"github.com/containers/storage"
+	"github.com/hashicorp/go-multierror"
 	"github.com/opencontainers/go-digest"
 	imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/pflag"
 )
 
 func (ir *ImageEngine) Exists(_ context.Context, nameOrID string) (*entities.BoolReport, error) {
@@ -928,4 +937,403 @@ func putSignature(manifestBlob []byte, mech signature.SigningMechanism, sigStore
 		return err
 	}
 	return os.WriteFile(filepath.Join(signatureDir, sigFilename), newSig, 0644)
+}
+
+const (
+	LocalImageBuilderName   = "(local)"
+	localImageBuilderDriver = "local"
+)
+
+type podmanLocal struct {
+	flagSet           *pflag.FlagSet
+	config            *config.Config
+	storeOptions      storage.StoreOptions
+	engine            entities.ImageEngine
+	platforms         sync.Once
+	platformsErr      error
+	os                string
+	arch              string
+	variant           string
+	nativePlatforms   []string
+	emulatedPlatforms []string
+}
+
+type listLocal struct {
+	listName     string
+	flagSet      *pflag.FlagSet
+	config       *config.Config
+	storeOptions storage.StoreOptions
+	options      ListBuilderOptions
+}
+
+func (l *podmanLocal) Driver(ctx context.Context) string {
+	return localImageBuilderDriver
+}
+
+func (l *podmanLocal) Name(ctx context.Context) string {
+	return LocalImageBuilderName
+}
+
+func (l *podmanLocal) Status(ctx context.Context) error {
+	return nil
+}
+
+func (l *podmanLocal) Info(ctx context.Context, options entities.InfoOptions) (*entities.Info, error) {
+	l.platforms.Do(func() {
+		l.os, l.arch, l.variant, l.nativePlatforms, l.emulatedPlatforms, l.platformsErr = l.fetchInfo(ctx, options)
+	})
+	return &entities.Info{NativePlatforms: append([]string{}, l.nativePlatforms...), EmulatedPlatforms: l.emulatedPlatforms}, l.platformsErr
+}
+
+func (l *podmanLocal) NativePlatforms(ctx context.Context, options entities.InfoOptions) ([]string, error) {
+	l.platforms.Do(func() {
+		l.os, l.arch, l.variant, l.nativePlatforms, l.emulatedPlatforms, l.platformsErr = l.fetchInfo(ctx, options)
+	})
+	return append([]string{}, l.nativePlatforms...), l.platformsErr
+}
+
+func (l *podmanLocal) EmulatedPlatforms(ctx context.Context, options entities.InfoOptions) ([]string, error) {
+	l.platforms.Do(func() {
+		l.os, l.arch, l.variant, l.nativePlatforms, l.emulatedPlatforms, l.platformsErr = l.fetchInfo(ctx, options)
+	})
+	return l.emulatedPlatforms, l.platformsErr
+}
+
+func (l *podmanLocal) BuildfarmBuild(ctx context.Context, reference string, containerFiles []string, options entities.BuildOptions) (*entities.BuildReport, error) {
+	var buildReport entities.BuildReport
+	l.platforms.Do(func() {
+		l.os, l.arch, l.variant, l.nativePlatforms, l.emulatedPlatforms, l.platformsErr = l.fetchInfo(ctx, entities.InfoOptions{})
+	})
+	if l.platformsErr != nil {
+		return &buildReport, fmt.Errorf("determining local platform: %w", l.platformsErr)
+	}
+	theseOptions := podmanBuildOptionsFromBuildOptions(options, l.os, l.arch, l.variant)
+	report, err := l.engine.Build(ctx, containerFiles, theseOptions)
+	if err != nil {
+		return &buildReport, fmt.Errorf("building for %v locally: %w", theseOptions.Platforms, err)
+	}
+	buildReport.ID = report.ID
+	buildReport.SaveFormat = "oci-archive"
+	if options.OutputFormat == buildah.Dockerv2ImageManifest {
+		buildReport.SaveFormat = "docker-archive"
+	}
+	return &buildReport, nil
+}
+
+func (l *podmanLocal) PullToFile(ctx context.Context, options entities.PullToFileOptions) (reference string, err error) {
+	saveOptions := entities.ImageSaveOptions{
+		Format: options.SaveFormat,
+		Output: options.SaveFile,
+	}
+	if err := l.engine.Save(ctx, options.ImageID, nil, saveOptions); err != nil {
+		return "", fmt.Errorf("saving image %q: %w", options.ImageID, err)
+	}
+	return options.SaveFormat + ":" + options.SaveFile, nil
+}
+
+func (l *podmanLocal) PullToLocal(ctx context.Context, options entities.PullToLocalOptions) (reference string, err error) {
+	destination := options.Destination
+
+	// already present at destination?
+	var br *entities.BoolReport
+	if destination == nil {
+		br, err = l.engine.Exists(ctx, options.ImageID)
+	} else {
+		br, err = destination.Exists(ctx, options.ImageID)
+	}
+	if err != nil {
+		return "", err
+	}
+	if br.Value {
+		return istorage.Transport.Name() + ":" + options.ImageID, nil
+	}
+
+	tempFile, err := ioutil.TempFile("", "")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	saveOptions := entities.ImageSaveOptions{
+		Format: options.SaveFormat,
+		Output: tempFile.Name(),
+	}
+	if err := l.engine.Save(ctx, options.ImageID, nil, saveOptions); err != nil {
+		return "", fmt.Errorf("saving image %q: %w", options.ImageID, err)
+	}
+
+	loadOptions := entities.ImageLoadOptions{
+		Input: tempFile.Name(),
+	}
+	if destination == nil {
+		_, err = l.engine.Load(ctx, loadOptions)
+	} else {
+		_, err = destination.Load(ctx, loadOptions)
+	}
+	if err != nil {
+		return "", err
+	}
+
+	return istorage.Transport.Name() + ":" + options.ImageID, nil
+}
+
+func (l *podmanLocal) Done(ctx context.Context) error {
+	return nil
+}
+
+// RemoveImage removes an image from the local engine.
+func (r *podmanLocal) RemoveImage(ctx context.Context, options entities.RemoveImageOptions) error {
+	rmOptions := entities.ImageRemoveOptions{}
+	report, errs := r.engine.Remove(ctx, []string{options.ImageID}, rmOptions)
+	if len(errs) > 0 {
+		if len(errs) > 1 {
+			var err *multierror.Error
+			for _, e := range errs {
+				err = multierror.Append(err, e)
+			}
+			if multi := err.ErrorOrNil(); multi != nil {
+				return fmt.Errorf("removing intermediate image %q from local storage: %w", options.ImageID, multi)
+			}
+			return nil
+		} else {
+			return fmt.Errorf("removing intermediate image %q from local storage: %w", options.ImageID, errs[0])
+		}
+	}
+	if report.ExitCode != 0 {
+		return fmt.Errorf("removing intermediate image %q from local storage: status %d", options.ImageID, report.ExitCode)
+	}
+	return nil
+}
+
+// PruneImages removes unused images from the local engine.
+func (r *podmanLocal) PruneImages(ctx context.Context, options entities.PruneImageOptions) (entities.PruneImageReport, error) {
+	pruneReports, err := r.engine.Prune(ctx, entities.ImagePruneOptions{
+		All:    options.All,
+		Filter: []string{fmt.Sprintf("dangling=%v", !options.All)},
+	})
+	if err != nil {
+		return entities.PruneImageReport{}, fmt.Errorf("removing unused images from local storage: %w", err)
+	}
+	var report entities.PruneImageReport
+	for _, pruneReport := range pruneReports {
+		if pruneReport.Err == nil && pruneReport.Id != "" {
+			report.ImageIDs = append(report.ImageIDs, pruneReport.Id)
+		}
+	}
+	return report, nil
+}
+
+func (l *podmanLocal) fetchInfo(ctx context.Context, options entities.InfoOptions) (os, arch, variant string, nativePlatforms []string, emulatedPlatforms []string, err error) {
+	nativePlatform := parse.DefaultPlatform()
+	platform := strings.SplitN(nativePlatform, "/", 3)
+	switch len(platform) {
+	case 0, 1:
+		return "", "", "", nil, nil, fmt.Errorf("unparseable default platform %q", nativePlatform)
+	case 2:
+		os, arch = platform[0], platform[1]
+	case 3:
+		os, arch, variant = platform[0], platform[1], platform[2]
+	}
+	os, arch, variant = libimage.NormalizePlatform(os, arch, variant)
+	nativePlatform = os + "/" + arch
+	if variant != "" {
+		nativePlatform += ("/" + variant)
+	}
+	emulatedPlatforms = emulation.Registered()
+	return os, arch, variant, append([]string{}, nativePlatform), emulatedPlatforms, nil
+}
+
+// NewPodmanLocalListBuilder returns a manifest list builder which saves a
+// manifest list and images to local storage.
+func NewPodmanLocalListBuilder(listName string, flags *pflag.FlagSet, storeOptions *storage.StoreOptions, options ListBuilderOptions) (ListBuilder, error) {
+	if storeOptions == nil {
+		storeOptions = &storage.StoreOptions{}
+	}
+	if options.IIDFile != "" {
+		return nil, fmt.Errorf("local filesystem doesn't use image IDs, --iidfile not supported")
+	}
+	custom, err := config.ReadCustomConfig()
+	if err != nil {
+		return nil, fmt.Errorf("reading custom config: %w", err)
+	}
+	ll := &listLocal{
+		listName: listName,
+		flagSet:  flags,
+		config:   custom,
+		storeOptions: storage.StoreOptions{
+			GraphRoot:          storeOptions.GraphRoot,
+			RunRoot:            storeOptions.RunRoot,
+			GraphDriverName:    storeOptions.GraphDriverName,
+			GraphDriverOptions: append([]string{}, storeOptions.GraphDriverOptions...),
+		},
+		options: options,
+	}
+	return ll, nil
+}
+
+// Build retrieves images from the build reports and assembles them into a
+// manifest list in local container storage.
+func (l *listLocal) Build(ctx context.Context, images map[entities.BuildReport]entities.ImageEngine) (string, error) {
+	podmanConfig := entities.PodmanConfig{
+		FlagSet:                  l.flagSet,
+		EngineMode:               entities.ABIMode,
+		ContainersConf:           &config.Config{},
+		ContainersConfDefaultsRO: l.config,
+		Runroot:                  l.storeOptions.RunRoot,
+		StorageDriver:            l.storeOptions.GraphDriverName,
+		StorageOpts:              l.storeOptions.GraphDriverOptions,
+	}
+	localEngine, err := infra.NewImageEngine(&podmanConfig)
+	if err != nil {
+		return "", fmt.Errorf("initializing local image engine: %w", err)
+	}
+	defer localEngine.Shutdown(ctx)
+
+	localRuntime, err := libimage.RuntimeFromStoreOptions(nil, &l.storeOptions)
+	if err != nil {
+		return "", fmt.Errorf("initializing local manifest list storage: %w", err)
+	}
+	defer localRuntime.Shutdown(false)
+
+	// find/create the list
+	list, err := localRuntime.LookupManifestList(l.listName)
+	if err != nil {
+		list, err = localRuntime.CreateManifestList(l.listName)
+	}
+	if err != nil {
+		return "", fmt.Errorf("creating manifest list %q: %w", l.listName, err)
+	}
+
+	// pull the images into local storage
+	var pullGroup multierror.Group
+	refs := make(map[string]entities.ImageEngine)
+	var refsMutex sync.Mutex
+	for image, engine := range images {
+		image, engine := image, engine
+		pullOptions := entities.PullToLocalOptions{
+			ImageID:     image.ID,
+			SaveFormat:  image.SaveFormat,
+			Destination: localEngine,
+		}
+		pullGroup.Go(func() error {
+			logrus.Infof("copying image %s", image.ID)
+			defer logrus.Infof("copied image %s", image.ID)
+			ref, err := engine.PullToLocal(ctx, pullOptions)
+			if err != nil {
+				return fmt.Errorf("pulling image %q to local storage: %w", image, err)
+			}
+			refsMutex.Lock()
+			defer refsMutex.Unlock()
+			refs[ref] = engine
+			return nil
+		})
+	}
+	pullErrors := pullGroup.Wait()
+	err = pullErrors.ErrorOrNil()
+	if err != nil {
+		return "", fmt.Errorf("building: %w", err)
+	}
+
+	if l.options.RemoveIntermediateImages {
+		var rmGroup multierror.Group
+		for image, engine := range images {
+			if engine.Name(ctx) == LocalImageBuilderName {
+				continue
+			}
+			image, engine := image, engine
+			rmGroup.Go(func() error {
+				return engine.RemoveImage(ctx, entities.RemoveImageOptions{ImageID: image.ID})
+			})
+		}
+		rmErrors := rmGroup.Wait()
+		if rmErrors != nil {
+			if err = rmErrors.ErrorOrNil(); err != nil {
+				return "", fmt.Errorf("removing intermediate images: %w", err)
+			}
+		}
+	}
+
+	// clear the list in case it already existed
+	listContents, err := list.Inspect()
+	if err != nil {
+		return "", fmt.Errorf("inspecting list %q: %w", l.listName, err)
+	}
+	for _, instance := range listContents.Manifests {
+		if err := list.RemoveInstance(instance.Digest); err != nil {
+			return "", fmt.Errorf("removing instance %q from list %q: %w", instance.Digest, l.listName, err)
+		}
+	}
+
+	// add the images to the list
+	for ref := range refs {
+		options := libimage.ManifestListAddOptions{}
+		if _, err := list.Add(ctx, ref, &options); err != nil {
+			return "", fmt.Errorf("adding image %q to list: %w", ref, err)
+		}
+	}
+
+	return l.listName, nil
+}
+
+func podmanBuildOptionsFromBuildOptions(options entities.BuildOptions, os, arch, variant string) entities.BuildOptions {
+	pullPolicy := define.PullIfMissing
+	if options.Pull {
+		pullPolicy = define.PullAlways
+	}
+	configureNetwork := define.NetworkDefault
+	if options.ConfigureNetwork != nil {
+		if *options.ConfigureNetwork {
+			configureNetwork = define.NetworkEnabled
+		} else {
+			configureNetwork = define.NetworkDisabled
+		}
+	}
+	theseOptions := entities.BuildOptions{
+		BuildOptions: define.BuildOptions{
+			Layers: true,
+			CommonBuildOpts: &define.CommonBuildOptions{
+				ShmSize:      options.ShmSize,
+				Ulimit:       append([]string{}, options.Ulimit...),
+				Memory:       options.Memory,
+				MemorySwap:   options.MemorySwap,
+				CPUShares:    options.CPUShares,
+				CPUQuota:     options.CPUQuota,
+				CPUPeriod:    options.CPUPeriod,
+				CPUSetCPUs:   options.CPUSetCPUs,
+				CPUSetMems:   options.CPUSetMems,
+				CgroupParent: options.CgroupParent,
+				AddHost:      append([]string{}, options.AddHost...),
+			},
+			OutputFormat:            options.OutputFormat,
+			Out:                     options.Out,
+			Err:                     options.Err,
+			ForceRmIntermediateCtrs: options.ForceRemoveIntermediateContainers,
+			RemoveIntermediateCtrs:  options.RemoveIntermediateContainers,
+			Platforms:               []struct{ OS, Arch, Variant string }{{os, arch, variant}},
+			PullPolicy:              pullPolicy,
+			IIDFile:                 options.IIDFile,
+			ContextDirectory:        options.ContextDirectory,
+			Labels:                  append([]string{}, options.Labels...),
+			Args:                    copyStringStringMap(options.Args),
+			NoCache:                 options.NoCache,
+			Quiet:                   options.Quiet,
+			CacheFrom:               append([]reference.Named{}, options.CacheFrom...),
+			CacheTo:                 append([]reference.Named{}, options.CacheTo...),
+			Target:                  options.Target,
+			ConfigureNetwork:        configureNetwork,
+		},
+	}
+	return theseOptions
+}
+
+func copyStringStringMap(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]string)
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }

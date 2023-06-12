@@ -174,6 +174,11 @@ func getVolumes(cmd *cobra.Command, toComplete string) ([]string, cobra.ShellCom
 	return suggestions, cobra.ShellCompDirectiveNoFileComp
 }
 
+// TODO: Finish writing this function
+func getFarms(cmd *cobra.Command, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return []string{}, cobra.ShellCompDirectiveNoFileComp
+}
+
 func getImages(cmd *cobra.Command, toComplete string) ([]string, cobra.ShellCompDirective) {
 	suggestions := []string{}
 	listOptions := entities.ImageListOptions{}
@@ -580,6 +585,13 @@ func AutocompleteVolumes(cmd *cobra.Command, args []string, toComplete string) (
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return getVolumes(cmd, toComplete)
+}
+
+func AutocompleteFarms(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if !validCurrentCmdLine(cmd, args, toComplete) {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return getFarms(cmd, toComplete)
 }
 
 // AutocompleteSecrets - Autocomplete secrets.
@@ -1645,6 +1657,14 @@ func AutocompleteVolumeFilters(cmd *cobra.Command, args []string, toComplete str
 		"label=":    nil,
 		"opt=":      nil,
 		"dangling=": getBoolCompletion,
+	}
+	return completeKeyValues(toComplete, kv)
+}
+
+func AutocompleteBuildfarmFilters(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	kv := keyValueCompletion{
+		"name=":  func(s string) ([]string, cobra.ShellCompDirective) { return getFarms(cmd, s) },
+		"label=": nil,
 	}
 	return completeKeyValues(toComplete, kv)
 }

@@ -471,3 +471,23 @@ type ImageUnmountReport struct {
 	Err error
 	Id  string //nolint:revive,stylecheck
 }
+
+// type PullToFileOptions struct {
+// 	ImageID    string
+// 	SaveFormat string
+// 	SaveFile   string
+// }
+
+// type PullToLocalOptions struct {
+// 	ImageID     string
+// 	SaveFormat  string
+// 	Destination ImageEngine
+// }
+
+// type InfoOptions struct {
+// }
+
+// type Info struct {
+// 	NativePlatforms   []string
+// 	EmulatedPlatforms []string
+// }

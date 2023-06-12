@@ -115,7 +115,8 @@ type BuildOptions struct {
 // BuildReport is the image-build report.
 type BuildReport struct {
 	// ID of the image.
-	ID string
+	ID         string
+	SaveFormat string
 }
 
 type IDOrNameResponse struct {

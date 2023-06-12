@@ -88,6 +88,7 @@ func inspect(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	rows := make([]namedDestination, 0)
+	fmt.Println("----connections----:", cfg.Engine.ServiceDestinations)
 	for k, v := range cfg.Engine.ServiceDestinations {
 		if args != nil && !util.StringInSlice(k, args) {
 			continue
