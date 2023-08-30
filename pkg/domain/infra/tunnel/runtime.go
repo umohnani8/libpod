@@ -13,6 +13,7 @@ import (
 // Image-related runtime using an ssh-tunnel to utilize Podman service
 type ImageEngine struct {
 	ClientCtx context.Context
+	Farm      string
 }
 
 // Container-related runtime using an ssh-tunnel to utilize Podman service

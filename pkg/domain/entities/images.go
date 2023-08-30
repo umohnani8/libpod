@@ -478,3 +478,31 @@ type ImageUnmountReport struct {
 	Err error
 	Id  string //nolint:revive,stylecheck
 }
+
+type FarmInfo struct {
+	NativePlatforms   []string
+	EmulatedPlatforms []string
+	OS                string
+	Arch              string
+	Variant           string
+}
+
+type PullToFileOptions struct {
+	ImageID    string
+	SaveFormat string
+	SaveFile   string
+}
+
+type PullToLocalOptions struct {
+	ImageID     string
+	SaveFormat  string
+	Destination ImageEngine
+}
+
+type ListBuilderOptions struct {
+	ForceRemoveIntermediateContainers bool
+	RemoveIntermediateContainers      bool
+	RemoveIntermediateImages          bool
+	PruneImagesOnSuccess              bool
+	IIDFile                           string
+}

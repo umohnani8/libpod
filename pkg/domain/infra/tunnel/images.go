@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/containers/buildah"
 	"github.com/containers/common/libimage"
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/common/pkg/ssh"
@@ -372,10 +373,14 @@ func (ir *ImageEngine) Config(_ context.Context) (*config.Config, error) {
 	return config.Default()
 }
 
-func (ir *ImageEngine) Build(_ context.Context, containerFiles []string, opts entities.BuildOptions) (*entities.BuildReport, error) {
+func (ir *ImageEngine) Build(ctx context.Context, containerFiles []string, opts entities.BuildOptions) (*entities.BuildReport, error) {
 	report, err := images.Build(ir.ClientCtx, containerFiles, opts)
 	if err != nil {
 		return nil, err
+	}
+	report.SaveFormat = "oci-archive"
+	if opts.OutputFormat == buildah.Dockerv2ImageManifest {
+		report.SaveFormat = "docker-archive"
 	}
 	return report, nil
 }

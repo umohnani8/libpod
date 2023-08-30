@@ -110,12 +110,39 @@ type ContainerCreateResponse struct {
 // BuildOptions describe the options for building container images.
 type BuildOptions struct {
 	buildahDefine.BuildOptions
+
+	// Add farm specific build options
+	// OutputFormat string
+	FarmBuild bool
+	FarmBuildOpts
 }
 
 // BuildReport is the image-build report.
 type BuildReport struct {
 	// ID of the image.
 	ID string
+
+	// possibly add some farm specific build report options here
+	SaveFormat string
+}
+
+type FarmBuildOpts struct {
+	ForceRemoveIntermediateContainers bool
+	RemoveIntermediateContainers      bool
+	RemoveIntermediateImages          bool
+	PruneImagesOnSuccess              bool
+	Pull                              bool
+	ShmSize                           string
+	Ulimit                            []string
+	Memory                            int64
+	MemorySwap                        int64
+	CPUShares                         uint64
+	CPUQuota                          int64
+	CPUPeriod                         uint64
+	CPUSetCPUs                        string
+	CPUSetMems                        string
+	CgroupParent                      string
+	AddHost                           []string
 }
 
 type IDOrNameResponse struct {

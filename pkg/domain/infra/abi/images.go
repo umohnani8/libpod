@@ -15,6 +15,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/containers/buildah"
 	"github.com/containers/common/libimage"
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/common/pkg/ssh"
@@ -512,7 +513,11 @@ func (ir *ImageEngine) Build(ctx context.Context, containerFiles []string, opts 
 	if err != nil {
 		return nil, err
 	}
-	return &entities.BuildReport{ID: id}, nil
+	saveFormat := "oci-archive"
+	if opts.OutputFormat == buildah.Dockerv2ImageManifest {
+		saveFormat = "docker-archive"
+	}
+	return &entities.BuildReport{ID: id, SaveFormat: saveFormat}, nil
 }
 
 func (ir *ImageEngine) Tree(ctx context.Context, nameOrID string, opts entities.ImageTreeOptions) (*entities.ImageTreeReport, error) {
@@ -716,6 +721,252 @@ func (ir *ImageEngine) Scp(ctx context.Context, src, dst string, parentFlags []s
 	}
 	return nil
 }
+
+// func (ir *ImageEngine) FarmName(ctx context.Context) string {
+// 	return LocalFarmImageBuilderName
+// }
+
+// func (ir *ImageEngine) FarmDriver(ctx context.Context) string {
+// 	return localFarmImageBuilderDriver
+// }
+
+// func (ir *ImageEngine) fetchInfo(ctx context.Context) (os, arch, variant string, nativePlatforms []string, emulatedPlatforms []string, err error) {
+// 	nativePlatform := parse.DefaultPlatform()
+// 	platform := strings.SplitN(nativePlatform, "/", 3)
+// 	switch len(platform) {
+// 	case 0, 1:
+// 		return "", "", "", nil, nil, fmt.Errorf("unparseable default platform %q", nativePlatform)
+// 	case 2:
+// 		os, arch = platform[0], platform[1]
+// 	case 3:
+// 		os, arch, variant = platform[0], platform[1], platform[2]
+// 	}
+// 	os, arch, variant = libimage.NormalizePlatform(os, arch, variant)
+// 	nativePlatform = os + "/" + arch
+// 	if variant != "" {
+// 		nativePlatform += ("/" + variant)
+// 	}
+// 	emulatedPlatforms = emulation.Registered()
+// 	return os, arch, variant, append([]string{}, nativePlatform), emulatedPlatforms, nil
+// }
+
+// func (ir *ImageEngine) FarmInspect(ctx context.Context) (*entities.FarmInfo, error) {
+// 	var (
+// 		platforms          sync.Once
+// 		platformsErr       error
+// 		os, arch, variant  string
+// 		nativeP, emulatedP []string
+// 	)
+// 	platforms.Do(func() {
+// 		os, arch, variant, nativeP, emulatedP, platformsErr = ir.fetchInfo(ctx)
+// 	})
+// 	return &entities.FarmInfo{NativePlatforms: nativeP, EmulatedPlatforms: emulatedP, OS: os, Arch: arch, Variant: variant}, platformsErr
+// }
+
+// func (ir *ImageEngine) FarmStatus(ctx context.Context) error {
+// 	_, err := ir.Config(ctx)
+// 	return err
+// }
+
+// // PullToFile pulls the image from the remote engine and saves it to a file,
+// // returning a string-format reference which can be parsed by containers/image.
+// func (ir *ImageEngine) PullToFile(ctx context.Context, options entities.PullToFileOptions) (reference string, err error) {
+// 	saveOptions := entities.ImageSaveOptions{
+// 		Format: options.SaveFormat,
+// 		Output: options.SaveFile,
+// 	}
+// 	if err := ir.Save(ctx, options.ImageID, nil, saveOptions); err != nil {
+// 		return "", fmt.Errorf("saving image %q: %w", options.ImageID, err)
+// 	}
+// 	return options.SaveFormat + ":" + options.SaveFile, nil
+// }
+
+// func (ir *ImageEngine) PullToLocal(ctx context.Context, options entities.PullToLocalOptions) (reference string, err error) {
+// 	destination := options.Destination
+
+// 	// already present at destination?
+// 	var br *entities.BoolReport
+// 	if destination == nil {
+// 		br, err = ir.Exists(ctx, options.ImageID)
+// 	} else {
+// 		br, err = destination.Exists(ctx, options.ImageID)
+// 	}
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	if br.Value {
+// 		return istorage.Transport.Name() + ":" + options.ImageID, nil
+// 	}
+
+// 	tempFile, err := ioutil.TempFile("", "")
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	defer os.Remove(tempFile.Name())
+// 	defer tempFile.Close()
+
+// 	saveOptions := entities.ImageSaveOptions{
+// 		Format: options.SaveFormat,
+// 		Output: tempFile.Name(),
+// 	}
+// 	if err := ir.Save(ctx, options.ImageID, nil, saveOptions); err != nil {
+// 		return "", fmt.Errorf("saving image %q: %w", options.ImageID, err)
+// 	}
+
+// 	loadOptions := entities.ImageLoadOptions{
+// 		Input: tempFile.Name(),
+// 	}
+// 	if destination == nil {
+// 		_, err = ir.Load(ctx, loadOptions)
+// 	} else {
+// 		_, err = destination.Load(ctx, loadOptions)
+// 	}
+// 	if err != nil {
+// 		return "", err
+// 	}
+
+// 	return istorage.Transport.Name() + ":" + options.ImageID, nil
+// }
+
+// type listLocal struct {
+// 	listName string
+// 	// flagSet      *pflag.FlagSet
+// 	config       *config.Config
+// 	storeOptions storage.StoreOptions
+// 	options      entities.ListBuilderOptions
+// }
+
+// // NewPodmanLocalListBuilder returns a manifest list builder which saves a
+// // manifest list and images to local storage.
+// func NewPodmanLocalListBuilder(listName string, storeOptions *storage.StoreOptions, options entities.ListBuilderOptions) (entities.ListBuilder, error) {
+// 	if storeOptions == nil {
+// 		storeOptions = &storage.StoreOptions{}
+// 	}
+// 	if options.IIDFile != "" {
+// 		return nil, fmt.Errorf("local filesystem doesn't use image IDs, --iidfile not supported")
+// 	}
+// 	custom, err := config.ReadCustomConfig()
+// 	if err != nil {
+// 		return nil, fmt.Errorf("reading custom config: %w", err)
+// 	}
+// 	ll := &listLocal{
+// 		listName: listName,
+// 		// flagSet:  flags,
+// 		config: custom,
+// 		storeOptions: storage.StoreOptions{
+// 			GraphRoot:          storeOptions.GraphRoot,
+// 			RunRoot:            storeOptions.RunRoot,
+// 			GraphDriverName:    storeOptions.GraphDriverName,
+// 			GraphDriverOptions: append([]string{}, storeOptions.GraphDriverOptions...),
+// 		},
+// 		options: options,
+// 	}
+// 	return ll, nil
+// }
+
+// // Build retrieves images from the build reports and assembles them into a
+// // manifest list in local container storage.
+// func (l *listLocal) Build(ctx context.Context, images map[entities.BuildReport]entities.ImageEngine) (string, error) {
+// 	podmanConfig := entities.PodmanConfig{
+// 		// FlagSet:                  l.flagSet,
+// 		EngineMode:               entities.ABIMode,
+// 		ContainersConf:           &config.Config{},
+// 		ContainersConfDefaultsRO: l.config,
+// 		Runroot:                  l.storeOptions.RunRoot,
+// 		StorageDriver:            l.storeOptions.GraphDriverName,
+// 		StorageOpts:              l.storeOptions.GraphDriverOptions,
+// 	}
+// 	localEngine, err := NewImageEngine(&podmanConfig)
+// 	if err != nil {
+// 		return "", fmt.Errorf("initializing local image engine: %w", err)
+// 	}
+// 	defer localEngine.Shutdown(ctx)
+
+// 	localRuntime, err := libimage.RuntimeFromStoreOptions(nil, &l.storeOptions)
+// 	if err != nil {
+// 		return "", fmt.Errorf("initializing local manifest list storage: %w", err)
+// 	}
+// 	defer localRuntime.Shutdown(false)
+
+// 	// find/create the list
+// 	list, err := localRuntime.LookupManifestList(l.listName)
+// 	if err != nil {
+// 		list, err = localRuntime.CreateManifestList(l.listName)
+// 	}
+// 	if err != nil {
+// 		return "", fmt.Errorf("creating manifest list %q: %w", l.listName, err)
+// 	}
+
+// 	// pull the images into local storage
+// 	var pullGroup multierror.Group
+// 	refs := make(map[string]entities.ImageEngine)
+// 	var refsMutex sync.Mutex
+// 	for image, engine := range images {
+// 		image, engine := image, engine
+// 		pullOptions := entities.PullToLocalOptions{
+// 			ImageID:     image.ID,
+// 			SaveFormat:  image.SaveFormat,
+// 			Destination: localEngine,
+// 		}
+// 		pullGroup.Go(func() error {
+// 			logrus.Infof("copying image %s", image.ID)
+// 			defer logrus.Infof("copied image %s", image.ID)
+// 			ref, err := engine.PullToLocal(ctx, pullOptions)
+// 			if err != nil {
+// 				return fmt.Errorf("pulling image %q to local storage: %w", image, err)
+// 			}
+// 			refsMutex.Lock()
+// 			defer refsMutex.Unlock()
+// 			refs[ref] = engine
+// 			return nil
+// 		})
+// 	}
+// 	pullErrors := pullGroup.Wait()
+// 	err = pullErrors.ErrorOrNil()
+// 	if err != nil {
+// 		return "", fmt.Errorf("building: %w", err)
+// 	}
+
+// 	if l.options.RemoveIntermediateImages {
+// 		var rmGroup multierror.Group
+// 		for image, engine := range images {
+// 			if engine.Name(ctx) == LocalFarmImageBuilderName {
+// 				continue
+// 			}
+// 			image, engine := image, engine
+// 			rmGroup.Go(func() error {
+// 				return engine.RemoveImage(ctx, RemoveImageOptions{ImageID: image.ID})
+// 			})
+// 		}
+// 		rmErrors := rmGroup.Wait()
+// 		if rmErrors != nil {
+// 			if err = rmErrors.ErrorOrNil(); err != nil {
+// 				return "", fmt.Errorf("removing intermediate images: %w", err)
+// 			}
+// 		}
+// 	}
+
+// 	// clear the list in case it already existed
+// 	listContents, err := list.Inspect()
+// 	if err != nil {
+// 		return "", fmt.Errorf("inspecting list %q: %w", l.listName, err)
+// 	}
+// 	for _, instance := range listContents.Manifests {
+// 		if err := list.RemoveInstance(instance.Digest); err != nil {
+// 			return "", fmt.Errorf("removing instance %q from list %q: %w", instance.Digest, l.listName, err)
+// 		}
+// 	}
+
+// 	// add the images to the list
+// 	for ref := range refs {
+// 		options := libimage.ManifestListAddOptions{}
+// 		if _, err := list.Add(ctx, ref, &options); err != nil {
+// 			return "", fmt.Errorf("adding image %q to list: %w", ref, err)
+// 		}
+// 	}
+
+// 	return l.listName, nil
+// }
 
 func Transfer(ctx context.Context, source entities.ImageScpOptions, dest entities.ImageScpOptions, parentFlags []string) error {
 	if source.User == "" {

@@ -560,6 +560,7 @@ func Build(ctx context.Context, containerFiles []string, options entities.BuildO
 	if err != nil {
 		return nil, err
 	}
+	logrus.Infoln("-----in tunnel build-----")
 	response, err := conn.DoRequest(ctx, tarfile, http.MethodPost, "/build", params, headers)
 	if err != nil {
 		return nil, err

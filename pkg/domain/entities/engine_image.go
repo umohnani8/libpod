@@ -40,5 +40,18 @@ type ImageEngine interface { //nolint:interfacebloat
 	ManifestRemoveDigest(ctx context.Context, names, image string) (string, error)
 	ManifestRm(ctx context.Context, names []string) (*ImageRemoveReport, []error)
 	ManifestPush(ctx context.Context, name, destination string, imagePushOpts ImagePushOptions) (string, error)
+	ManifestListClear(ctx context.Context, name string) (string, error)
 	Sign(ctx context.Context, names []string, options SignOptions) (*SignReport, error)
+
+	FarmName(ctx context.Context) string
+	FarmDriver(ctx context.Context) string
+	FarmStatus(ctx context.Context) error
+	FarmInspect(ctx context.Context) (*FarmInfo, error)
+	PullToFile(ctx context.Context, options PullToFileOptions) (string, error)
+	PullToLocal(ctx context.Context, options PullToLocalOptions) (string, error)
+	// Done(ctx context.Context) error same as Shutdown
+}
+
+type ListBuilder interface {
+	Build(ctx context.Context, images map[BuildReport]ImageEngine) (string, error)
 }

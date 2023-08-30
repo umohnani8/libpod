@@ -115,6 +115,7 @@ func (r *Runtime) newImageBuildCompleteEvent(idOrName string) {
 
 // Build adds the runtime to the imagebuildah call
 func (r *Runtime) Build(ctx context.Context, options buildahDefine.BuildOptions, dockerfiles ...string) (string, reference.Canonical, error) {
+	logrus.Infoln("=====in runtime buil====")
 	if options.Runtime == "" {
 		options.Runtime = r.GetOCIRuntimePath()
 	}

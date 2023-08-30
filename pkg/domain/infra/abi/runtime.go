@@ -9,6 +9,8 @@ import (
 // Image-related runtime linked against libpod library
 type ImageEngine struct {
 	Libpod *libpod.Runtime
+
+	// Add Farm struct here
 }
 
 // Container-related runtime linked against libpod library
