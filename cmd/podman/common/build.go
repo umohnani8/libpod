@@ -46,7 +46,7 @@ type BuildFlagsWrapper struct {
 	Cleanup bool
 }
 
-func DefineBuildFlags(cmd *cobra.Command, buildOpts *BuildFlagsWrapper) {
+func DefineBuildFlags(cmd *cobra.Command, buildOpts *BuildFlagsWrapper, isFarmBuild bool) {
 	flags := cmd.Flags()
 
 	// buildx build --load ignored, but added for compliance
@@ -106,7 +106,7 @@ func DefineBuildFlags(cmd *cobra.Command, buildOpts *BuildFlagsWrapper) {
 	fromAndBudFlagsCompletions := buildahCLI.GetFromAndBudFlagsCompletions()
 	completion.CompleteCommandFlags(cmd, fromAndBudFlagsCompletions)
 	flags.SetNormalizeFunc(buildahCLI.AliasFlags)
-	if registry.IsRemote() {
+	if registry.IsRemote() || isFarmBuild {
 		_ = flags.MarkHidden("disable-content-trust")
 		_ = flags.MarkHidden("sign-by")
 		_ = flags.MarkHidden("signature-policy")
@@ -115,6 +115,13 @@ func DefineBuildFlags(cmd *cobra.Command, buildOpts *BuildFlagsWrapper) {
 		_ = flags.MarkHidden("output")
 		_ = flags.MarkHidden("logsplit")
 		_ = flags.MarkHidden("cw")
+	}
+	if isFarmBuild {
+		_ = flags.MarkHidden("all-platforms")
+		_ = flags.MarkHidden("arch")
+		_ = flags.MarkHidden("platform")
+		_ = flags.MarkHidden("stdin")
+		_ = flags.MarkHidden("variant")
 	}
 }
 

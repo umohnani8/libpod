@@ -15,6 +15,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/containers/buildah"
 	"github.com/containers/common/libimage"
 	"github.com/containers/common/libimage/filter"
 	"github.com/containers/common/pkg/config"
@@ -513,7 +514,11 @@ func (ir *ImageEngine) Build(ctx context.Context, containerFiles []string, opts 
 	if err != nil {
 		return nil, err
 	}
-	return &entities.BuildReport{ID: id}, nil
+	saveFormat := "oci-archive"
+	if opts.OutputFormat == buildah.Dockerv2ImageManifest {
+		saveFormat = "docker-archive"
+	}
+	return &entities.BuildReport{ID: id, SaveFormat: saveFormat}, nil
 }
 
 func (ir *ImageEngine) Tree(ctx context.Context, nameOrID string, opts entities.ImageTreeOptions) (*entities.ImageTreeReport, error) {

@@ -50,6 +50,7 @@ type PodmanConfig struct {
 	Syslog                   bool           // write to StdOut and Syslog, not supported when tunneling
 	Trace                    bool           // Hidden: Trace execution
 	URI                      string         // URI to RESTful API Service
+	FarmName                 string         // Name of farm node
 
 	Runroot        string
 	ImageStore     string

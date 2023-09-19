@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/containers/buildah"
 	"github.com/containers/common/libimage/filter"
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/common/pkg/ssh"
@@ -376,6 +377,10 @@ func (ir *ImageEngine) Build(_ context.Context, containerFiles []string, opts en
 	report, err := images.Build(ir.ClientCtx, containerFiles, opts)
 	if err != nil {
 		return nil, err
+	}
+	report.SaveFormat = "oci-archive"
+	if opts.OutputFormat == buildah.Dockerv2ImageManifest {
+		report.SaveFormat = "docker-archive"
 	}
 	return report, nil
 }

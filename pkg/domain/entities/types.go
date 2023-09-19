@@ -112,6 +112,7 @@ type ContainerCreateResponse struct {
 type BuildOptions struct {
 	buildahDefine.BuildOptions
 	ContainerFiles []string
+	FarmBuildOptions
 	// Files that need to be closed after the build
 	// so need to pass this to the main build functions
 	LogFileToClose *os.File
@@ -122,6 +123,12 @@ type BuildOptions struct {
 type BuildReport struct {
 	// ID of the image.
 	ID string
+	// Format to save the image in
+	SaveFormat string
+}
+
+type FarmBuildOptions struct {
+	Cleanup bool
 }
 
 type IDOrNameResponse struct {
