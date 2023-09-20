@@ -274,13 +274,6 @@ case "$PRIV_NAME" in
     *) die_unknown PRIV_NAME
 esac
 
-# shellcheck disable=SC2154
-if [[ -n "$ROOTLESS_USER" ]]; then
-    showrun echo "conditional setup for ROOTLESS_USER [=$ROOTLESS_USER]"
-    echo "ROOTLESS_USER=$ROOTLESS_USER" >> /etc/ci_environment
-    echo "ROOTLESS_UID=$ROOTLESS_UID" >> /etc/ci_environment
-fi
-
 # FIXME! experimental workaround for #16973, the "lookup cdn03.quay.io" flake.
 #
 # If you are reading this on or after April 2023:
@@ -408,6 +401,14 @@ case "$TEST_FLAVOR" in
             die "Invalid value for \$TEST_ENVIRON=$TEST_ENVIRON"
         fi
 
+        install_test_configs
+        ;;
+    farm)
+        showrun loginctl enable-linger $ROOTLESS_USER
+        showrun ssh $ROOTLESS_USER@localhost systemctl --user enable --now podman.socket
+        # showrun podman system connection add --identity /home/$ROOTLESS_USER/.ssh/id_rsa test-node $ROOTLESS_USER@localhost
+        # showrun echo $ROOTLESS_USER > /tmp/rootless-user
+        remove_packaged_podman_files
         install_test_configs
         ;;
     minikube)

@@ -151,7 +151,7 @@ setup_rootless() {
     # shellcheck disable=SC2154
     if passwd --status $ROOTLESS_USER
     then
-        if [[ $PRIV_NAME = "rootless" ]]; then
+        if [[ $PRIV_NAME = "rootless" ]] && [[ "$TEST_FLAVOR" != "farm"  ]]; then
             msg "Updating $ROOTLESS_USER user permissions on possibly changed libpod code"
             chown -R $ROOTLESS_USER:$ROOTLESS_USER "$GOPATH" "$GOSRC"
             return 0
@@ -198,6 +198,12 @@ setup_rootless() {
     # Maintain access-permission consistency with all other .ssh files.
     install -Z -m 700 -o $ROOTLESS_USER -g $ROOTLESS_USER \
         /root/.ssh/known_hosts /home/$ROOTLESS_USER/.ssh/known_hosts
+    
+    if [[ -n "$ROOTLESS_USER" ]]; then
+        # Make all future CI scripts aware of these values
+        echo "ROOTLESS_USER=$ROOTLESS_USER" >> /etc/ci_environment
+        echo "ROOTLESS_UID=$ROOTLESS_UID" >> /etc/ci_environment
+    fi
 }
 
 install_test_configs() {
