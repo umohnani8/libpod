@@ -606,6 +606,18 @@ func (ic *ContainerEngine) playKubePod(ctx context.Context, podName string, podY
 	// Go through the volumes and create a podman volume for all volumes that have been
 	// defined by a configmap or secret
 	for _, v := range volumes {
+		if v.Type == kube.KubeVolumeTypeEmptyDir {
+			fmt.Println("-----creating empty dir------")
+			volumeOptions := []libpod.VolumeCreateOption{
+				libpod.WithVolumeName(v.Source),
+				libpod.WithVolumeMountLabel(mountLabel),
+				libpod.WithVolumeSize(100),
+			}
+			_, err := ic.Libpod.NewVolume(ctx, volumeOptions...)
+			if err != nil {
+				return nil, nil, fmt.Errorf("error creating emptyDir volume %q: %w", v.Source, err)
+			}
+		}
 		if (v.Type == kube.KubeVolumeTypeConfigMap || v.Type == kube.KubeVolumeTypeSecret) && !v.Optional {
 			volumeOptions := []libpod.VolumeCreateOption{
 				libpod.WithVolumeName(v.Source),
