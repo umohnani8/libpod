@@ -45,6 +45,7 @@ type ImageEngine interface { //nolint:interfacebloat
 	FarmNodeName(ctx context.Context) string
 	FarmNodeDriver(ctx context.Context) string
 	FarmNodeInspect(ctx context.Context) (*FarmInspectReport, error)
-	PullToFile(ctx context.Context, options PullToFileOptions) (string, error)
+	// PullToFile(ctx context.Context, options PullToFileOptions) (string, error)
 	PullToLocal(ctx context.Context, options PullToLocalOptions) (string, error)
+	PushToRegistry(ctx context.Context, options PushToRegistryOptions) (string, error)
 }

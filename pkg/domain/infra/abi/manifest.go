@@ -200,6 +200,7 @@ func (ir *ImageEngine) ManifestAdd(ctx context.Context, name string, images []st
 		return "", errors.New("manifest add requires at least one image")
 	}
 
+	fmt.Println("---name---:", name)
 	manifestList, err := ir.Libpod.LibimageRuntime().LookupManifestList(name)
 	if err != nil {
 		return "", err
@@ -215,8 +216,10 @@ func (ir *ImageEngine) ManifestAdd(ctx context.Context, name string, images []st
 	}
 
 	for _, image := range images {
+		fmt.Println("---image to add----:", image)
 		instanceDigest, err := manifestList.Add(ctx, image, addOptions)
 		if err != nil {
+			fmt.Println("--adding error grrrr----", err)
 			return "", err
 		}
 

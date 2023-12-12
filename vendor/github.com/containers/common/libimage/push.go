@@ -5,6 +5,7 @@ package libimage
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	dockerArchiveTransport "github.com/containers/image/v5/docker/archive"
@@ -38,6 +39,7 @@ func (r *Runtime) Push(ctx context.Context, source, destination string, options 
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("-----source resolved----:", *image)
 
 	srcRef, err := image.StorageReference()
 	if err != nil {
@@ -55,16 +57,21 @@ func (r *Runtime) Push(ctx context.Context, source, destination string, options 
 
 	logrus.Debugf("Pushing image %s to %s", source, destination)
 
+	fmt.Println("---destination-----", destination)
 	destRef, err := alltransports.ParseImageName(destination)
 	if err != nil {
+		fmt.Println("---dest doesn't have transport-----:", destRef)
 		// If the input does not include a transport assume it refers
 		// to a registry.
 		dockerRef, dockerErr := alltransports.ParseImageName("docker://" + destination)
 		if dockerErr != nil {
+			fmt.Println("---docker ref error-----:", dockerErr, "------", destination)
 			return nil, err
 		}
+		fmt.Println("-----dockerRef-----:", dockerRef)
 		destRef = dockerRef
 	}
+	fmt.Println("---destref-----:", destRef)
 
 	if r.eventChannel != nil {
 		defer r.writeEvent(&Event{ID: image.ID(), Name: destination, Time: time.Now(), Type: EventTypeImagePush})

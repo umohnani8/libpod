@@ -11,6 +11,7 @@ import (
 
 	"github.com/containers/buildah/pkg/parse"
 	lplatform "github.com/containers/common/libimage/platform"
+	"github.com/containers/image/v5/docker"
 	istorage "github.com/containers/image/v5/storage"
 	"github.com/containers/podman/v4/pkg/domain/entities"
 	"github.com/containers/podman/v4/pkg/emulation"
@@ -58,18 +59,29 @@ func (ir *ImageEngine) FarmNodeInspect(ctx context.Context) (*entities.FarmInspe
 		Variant:           ir.variant}, ir.platformsErr
 }
 
+func (ir *ImageEngine) PushToRegistry(ctx context.Context, options entities.PushToRegistryOptions) (reference string, err error) {
+	fmt.Println("----destination save file----:", options.ManifestName)
+	report, err := ir.Push(ctx, options.ImageID, options.ManifestName+docker.UnknownDigestSuffix, entities.ImagePushOptions{Authfile: options.Authfile, Quiet: false})
+	if err != nil {
+		fmt.Println("-----error pushing------")
+		return "", err
+	}
+	fmt.Println("----manifest digest----:", report.ManifestDigest)
+	return report.ManifestDigest, nil
+}
+
 // PullToFile pulls the image from the remote engine and saves it to a file,
 // returning a string-format reference which can be parsed by containers/image.
-func (ir *ImageEngine) PullToFile(ctx context.Context, options entities.PullToFileOptions) (reference string, err error) {
-	saveOptions := entities.ImageSaveOptions{
-		Format: options.SaveFormat,
-		Output: options.SaveFile,
-	}
-	if err := ir.Save(ctx, options.ImageID, nil, saveOptions); err != nil {
-		return "", fmt.Errorf("saving image %q: %w", options.ImageID, err)
-	}
-	return options.SaveFormat + ":" + options.SaveFile, nil
-}
+// func (ir *ImageEngine) PullToFile(ctx context.Context, options entities.PullToFileOptions) (reference string, err error) {
+// 	saveOptions := entities.ImageSaveOptions{
+// 		Format: options.SaveFormat,
+// 		Output: options.SaveFile,
+// 	}
+// 	if err := ir.Save(ctx, options.ImageID, nil, saveOptions); err != nil {
+// 		return "", fmt.Errorf("saving image %q: %w", options.ImageID, err)
+// 	}
+// 	return options.SaveFormat + ":" + options.SaveFile, nil
+// }
 
 // PullToFile pulls the image from the remote engine and saves it to the local
 // engine passed in via options, returning a string-format reference which can

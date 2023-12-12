@@ -131,6 +131,8 @@ type BuildReport struct {
 type FarmBuildOptions struct {
 	// Cleanup removes built images from farm nodes on success
 	Cleanup bool
+	// Authfile is the path to the file holding registry credentials
+	Authfile string
 }
 
 type IDOrNameResponse struct {

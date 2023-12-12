@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/containers/common/pkg/auth"
+	"github.com/containers/common/pkg/completion"
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/podman/v4/cmd/podman/common"
 	"github.com/containers/podman/v4/cmd/podman/registry"
 	"github.com/containers/podman/v4/cmd/podman/utils"
-	"github.com/containers/podman/v4/pkg/domain/entities"
 	"github.com/containers/podman/v4/pkg/farm"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -45,20 +46,14 @@ func init() {
 	flags := buildCommand.Flags()
 	flags.SetNormalizeFunc(utils.AliasFlags)
 
-	localFlagName := "local"
-	// Default for local is true and hide this flag for the remote use case
-	if !registry.IsRemote() {
-		flags.BoolVarP(&buildOpts.local, localFlagName, "l", true, "Build image on local machine as well as on farm nodes")
-	}
+	authfileFlagName := "authfile"
+	flags.StringVar(&buildOpts.buildOptions.Authfile, authfileFlagName, auth.GetDefaultAuthFile(), "Path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override")
+	_ = buildCommand.RegisterFlagCompletionFunc(authfileFlagName, completion.AutocompleteDefault)
+
 	cleanupFlag := "cleanup"
 	flags.BoolVar(&buildOpts.buildOptions.Cleanup, cleanupFlag, false, "Remove built images from farm nodes on success")
-	platformsFlag := "platforms"
-	buildCommand.PersistentFlags().StringSliceVar(&buildOpts.platforms, platformsFlag, nil, "Build only on farm nodes that match the given platforms")
-
-	common.DefineBuildFlags(buildCommand, &buildOpts.buildOptions, true)
 
 	podmanConfig := registry.PodmanConfig()
-
 	farmFlagName := "farm"
 	// If remote, don't read the client's containers.conf file
 	defaultFarm := ""
@@ -66,6 +61,17 @@ func init() {
 		defaultFarm = podmanConfig.ContainersConfDefaultsRO.Farms.Default
 	}
 	flags.StringVar(&buildOpts.farm, farmFlagName, defaultFarm, "Farm to use for builds")
+
+	localFlagName := "local"
+	// Default for local is true and hide this flag for the remote use case
+	if !registry.IsRemote() {
+		flags.BoolVarP(&buildOpts.local, localFlagName, "l", true, "Build image on local machine as well as on farm nodes")
+	}
+
+	platformsFlag := "platforms"
+	buildCommand.PersistentFlags().StringSliceVar(&buildOpts.platforms, platformsFlag, nil, "Build only on farm nodes that match the given platforms")
+
+	common.DefineBuildFlags(buildCommand, &buildOpts.buildOptions, true)
 }
 
 func build(cmd *cobra.Command, args []string) error {
@@ -76,6 +82,11 @@ func build(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if cmd.Flags().Changed("authfile") {
+		if err := auth.CheckAuthFile(buildOpts.buildOptions.Authfile); err != nil {
+			return err
+		}
+	}
 	if !cmd.Flags().Changed("tag") {
 		return errors.New("cannot create manifest list without a name, value for --tag is required")
 	}
@@ -102,6 +113,7 @@ func build(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	opts.IIDFile = iidFile
+	opts.Authfile = buildOpts.buildOptions.Authfile
 
 	cfg, err := config.ReadCustomConfig()
 	if err != nil {
@@ -117,13 +129,16 @@ func build(cmd *cobra.Command, args []string) error {
 		defaultFarm = f
 	}
 
-	var localEngine entities.ImageEngine
+	buildLocal := false
+	localEngine := registry.ImageEngine()
+	// var localEngine entities.ImageEngine
 	if buildOpts.local {
 		localEngine = registry.ImageEngine()
+		buildLocal = true
 	}
 
 	ctx := registry.Context()
-	farm, err := farm.NewFarm(ctx, defaultFarm, localEngine)
+	farm, err := farm.NewFarm(ctx, defaultFarm, localEngine, buildLocal)
 	if err != nil {
 		return fmt.Errorf("initializing: %w", err)
 	}
@@ -137,7 +152,7 @@ func build(cmd *cobra.Command, args []string) error {
 	manifestName := opts.Output
 	// Set Output to "" so that the images built on the farm nodes have no name
 	opts.Output = ""
-	if err = farm.Build(ctx, schedule, *opts, manifestName); err != nil {
+	if err = farm.Build(ctx, schedule, *opts, manifestName, localEngine); err != nil {
 		return fmt.Errorf("build: %w", err)
 	}
 	logrus.Infof("build: ok")

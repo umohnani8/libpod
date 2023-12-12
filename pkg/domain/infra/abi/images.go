@@ -360,6 +360,8 @@ func (ir *ImageEngine) Push(ctx context.Context, source string, destination stri
 		pushOptions.Writer = os.Stderr
 	}
 
+	fmt.Println("---first destination-----:", destination)
+
 	pushedManifestBytes, pushError := ir.Libpod.LibimageRuntime().Push(ctx, source, destination, pushOptions)
 	if pushError == nil {
 		manifestDigest, err := manifest.Digest(pushedManifestBytes)

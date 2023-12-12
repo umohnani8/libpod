@@ -495,10 +495,11 @@ type FarmInspectReport struct {
 
 // PullToFileOptions are the options for pulling the images from farm
 // nodes into a dir
-type PullToFileOptions struct {
-	ImageID    string
-	SaveFormat string
-	SaveFile   string
+type PushToRegistryOptions struct {
+	ImageID string
+	// SaveFormat   string
+	ManifestName string
+	Authfile     string
 }
 
 // PullToLocalOptions are the options for pulling the images from farm

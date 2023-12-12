@@ -44,6 +44,7 @@ func Push(ctx context.Context, source string, destination string, options *PushO
 		params.Set("tlsVerify", strconv.FormatBool(!options.GetSkipTLSVerify()))
 	}
 	params.Set("destination", destination)
+	fmt.Println("======params======:", params.Get("quiet"), source)
 
 	path := fmt.Sprintf("/images/%s/push", source)
 	response, err := conn.DoRequest(ctx, nil, http.MethodPost, path, params, header)
@@ -55,6 +56,8 @@ func Push(ctx context.Context, source string, destination string, options *PushO
 	if !response.IsSuccess() {
 		return response.Process(err)
 	}
+
+	fmt.Println("---GetQuiet----:", options.GetQuiet())
 
 	var writer io.Writer
 	if options.GetQuiet() {
@@ -83,6 +86,8 @@ LOOP:
 		default:
 			// non-blocking select
 		}
+
+		fmt.Println("=============report=========:", report.ManifestDigest)
 
 		switch {
 		case report.Stream != "":

@@ -246,6 +246,7 @@ func (ir *ImageEngine) Import(ctx context.Context, opts entities.ImageImportOpti
 }
 
 func (ir *ImageEngine) Push(ctx context.Context, source string, destination string, opts entities.ImagePushOptions) (*entities.ImagePushReport, error) {
+	fmt.Println("======in push======")
 	if opts.Signers != nil {
 		return nil, fmt.Errorf("forwarding Signers is not supported for remote clients")
 	}
@@ -259,6 +260,7 @@ func (ir *ImageEngine) Push(ctx context.Context, source string, destination stri
 	if opts.CompressionLevel != nil {
 		options.WithCompressionLevel(*opts.CompressionLevel)
 	}
+	fmt.Println("======options.Quiet======:", *options.Quiet)
 
 	if s := opts.SkipTLSVerify; s != types.OptionalBoolUndefined {
 		if s == types.OptionalBoolTrue {
@@ -270,6 +272,7 @@ func (ir *ImageEngine) Push(ctx context.Context, source string, destination stri
 	if err := images.Push(ir.ClientCtx, source, destination, options); err != nil {
 		return nil, err
 	}
+	fmt.Println("=====options======", options.GetManifestDigest())
 	return &entities.ImagePushReport{ManifestDigest: options.GetManifestDigest()}, nil
 }
 

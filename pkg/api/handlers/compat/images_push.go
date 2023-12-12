@@ -93,7 +93,7 @@ func PushImage(w http.ResponseWriter, r *http.Request) {
 		Format:   query.Format,
 		Password: password,
 		Username: username,
-		Quiet:    true,
+		Quiet:    false,
 		Progress: make(chan types.ProgressProperties),
 	}
 	if _, found := r.URL.Query()["tlsVerify"]; found {
