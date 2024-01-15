@@ -1,5 +1,4 @@
 //go:build !remote
-// +build !remote
 
 package libimage
 
@@ -21,31 +20,29 @@ import (
 // indicates that the image matches the criteria.
 type filterFunc func(*Image) (bool, error)
 
-// Apply the specified filters.  At least one filter of each key must apply.
-func (i *Image) applyFilters(filters map[string][]filterFunc) (bool, error) {
-	matches := false
-	for key := range filters { // and
-		matches = false
-		for _, filter := range filters[key] { // or
+// Apply the specified filters.  All filters of each key must apply.
+func (i *Image) applyFilters(ctx context.Context, filters map[string][]filterFunc) (bool, error) {
+	// Initialize to true for an "AND" logic across all groups
+	matches := true
+	for key := range filters {
+		// Initialize to false for an "AND" logic within a group
+		groupMatches := false
+		for _, filter := range filters[key] {
 			var err error
-			matches, err = filter(i)
-			if err != nil {
-				// Some images may have been corrupted in the
-				// meantime, so do an extra check and make the
-				// error non-fatal (see containers/podman/issues/12582).
-				if errCorrupted := i.isCorrupted(""); errCorrupted != nil {
+			if groupMatches, err = filter(i); err != nil {
+				if errCorrupted := i.isCorrupted(ctx, ""); errCorrupted != nil {
 					logrus.Errorf(errCorrupted.Error())
 					return false, nil
 				}
 				return false, err
 			}
-			if matches {
-				break
+			// If any filter within a group doesn't match, return false
+			if !groupMatches {
+				return false, nil
 			}
 		}
-		if !matches {
-			return false, nil
-		}
+		// Update the matches across groups to ensure "AND" logic across all groups
+		matches = matches && groupMatches
 	}
 	return matches, nil
 }
@@ -63,7 +60,7 @@ func (r *Runtime) filterImages(ctx context.Context, images []*Image, options *Li
 	}
 	result := []*Image{}
 	for i := range images {
-		match, err := images[i].applyFilters(filters)
+		match, err := images[i].applyFilters(ctx, filters)
 		if err != nil {
 			return nil, err
 		}
@@ -84,7 +81,7 @@ func (r *Runtime) compileImageFilters(ctx context.Context, options *ListImagesOp
 	var tree *layerTree
 	getTree := func() (*layerTree, error) {
 		if tree == nil {
-			t, err := r.layerTree(nil)
+			t, err := r.layerTree(ctx, nil)
 			if err != nil {
 				return nil, err
 			}

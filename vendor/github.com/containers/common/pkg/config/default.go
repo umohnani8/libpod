@@ -295,9 +295,8 @@ func defaultMachineConfig() MachineConfig {
 
 // defaultFarmConfig returns the default farms configuration.
 func defaultFarmConfig() FarmConfig {
-	emptyList := make(map[string][]string)
 	return FarmConfig{
-		List: emptyList,
+		List: map[string][]string{},
 	}
 }
 
@@ -340,7 +339,7 @@ func defaultEngineConfig() (*EngineConfig, error) {
 
 	c.HelperBinariesDir.Set(defaultHelperBinariesDir)
 	if additionalHelperBinariesDir != "" {
-		// Prioritize addtionalHelperBinariesDir over defaults.
+		// Prioritize additionalHelperBinariesDir over defaults.
 		c.HelperBinariesDir.Set(append([]string{additionalHelperBinariesDir}, c.HelperBinariesDir.Get()...))
 	}
 	c.HooksDir.Set(DefaultHooksDirs)
@@ -556,7 +555,7 @@ func (c *Config) DNSServers() []string {
 	return c.Containers.DNSServers.Get()
 }
 
-// DNSSerches returns the default DNS searches to add to resolv.conf in containers.
+// DNSSearches returns the default DNS searches to add to resolv.conf in containers.
 func (c *Config) DNSSearches() []string {
 	return c.Containers.DNSSearches.Get()
 }
