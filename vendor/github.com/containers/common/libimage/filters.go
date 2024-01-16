@@ -12,7 +12,7 @@ import (
 
 	filtersPkg "github.com/containers/common/pkg/filters"
 	"github.com/containers/common/pkg/timetype"
-	"github.com/containers/image/v5/docker/reference"
+	"github.com/distribution/reference"
 	"github.com/sirupsen/logrus"
 )
 
@@ -90,6 +90,7 @@ func (r *Runtime) compileImageFilters(ctx context.Context, options *ListImagesOp
 		return tree, nil
 	}
 
+	var referenceFilters []string
 	filters := map[string][]filterFunc{}
 	duplicate := map[string]string{}
 	for _, f := range options.Filters {
@@ -181,7 +182,13 @@ func (r *Runtime) compileImageFilters(ctx context.Context, options *ListImagesOp
 			filter = filterManifest(ctx, manifest)
 
 		case "reference":
-			filter = filterReferences(r, value)
+			// filter = filterReferences(r, value)
+			if negate {
+				referenceFilters = append(referenceFilters, "!"+value)
+			} else {
+				referenceFilters = append(referenceFilters, value)
+			}
+			continue
 
 		case "until":
 			until, err := r.until(value)
@@ -198,6 +205,10 @@ func (r *Runtime) compileImageFilters(ctx context.Context, options *ListImagesOp
 		}
 		filters[key] = append(filters[key], filter)
 	}
+	filter := filterReferences(r, referenceFilters)
+	fmt.Println("----filter-----:", filter)
+	filters["reference"] = append(filters["reference"], filter)
+	fmt.Println("----filters-----:", filters)
 
 	return filters, nil
 }
@@ -271,12 +282,120 @@ func filterManifest(ctx context.Context, value bool) filterFunc {
 }
 
 // filterReferences creates a reference filter for matching the specified value.
-func filterReferences(r *Runtime, value string) filterFunc {
-	lookedUp, _, _ := r.LookupImage(value, nil)
+func filterReferences(r *Runtime, valueList []string) filterFunc {
+	fmt.Println("---value list----:", valueList)
+
+	// return func(img *Image) (bool, error) {
+	// 	// If valueList is empty, return true
+	// 	if len(valueList) == 0 {
+	// 		return true, nil
+	// 	}
+
+	// 	var negativeValues []string
+	// 	var positiveValues []string
+	// 	for _, value := range valueList {
+	// 		fmt.Println("--value----:", value)
+	// 		// isNegative := false
+	// 		if strings.HasPrefix(value, "!") {
+	// 			// isNegative = true
+	// 			value = value[1:]
+	// 			negativeValues = append(negativeValues, value)
+	// 		} else {
+	// 			positiveValues = append(positiveValues, value)
+	// 		}
+
+	// 		// lookedUp, _, _ := r.LookupImage(value, nil)
+	// 		// fmt.Println("---looked up-----:", lookedUp)
+	// 		// if lookedUp != nil && lookedUp.ID() == img.ID() {
+	// 		// 	if !isNegative {
+	// 		// 		return true, nil
+	// 		// 	} else {
+	// 		// 		return false, nil
+	// 		// 	}
+	// 		// }
+	// 	}
+
+	// 	refs, err := img.NamesReferences()
+	// 	if err != nil {
+	// 		return false, err
+	// 	}
+
+	// 	for _, ref := range refs {
+	// 		refString := ref.String() // FQN with tag/digest
+	// 		candidates := []string{refString}
+
+	// 		if named, isNamed := ref.(reference.Named); isNamed {
+	// 			candidates = append(candidates,
+	// 				reference.Path(named),
+	// 				refString[strings.LastIndex(refString, "/")+1:])
+
+	// 			trimmedString := reference.TrimNamed(named).String()
+	// 			if refString != trimmedString {
+	// 				tagOrDigest := refString[len(trimmedString):]
+	// 				candidates = append(candidates,
+	// 					trimmedString,
+	// 					reference.Path(named)+tagOrDigest,
+	// 					trimmedString[strings.LastIndex(trimmedString, "/")+1:])
+	// 			}
+	// 		}
+
+	// 		var shortList []string
+	// 		for _, candidate := range candidates {
+	// 			fmt.Println("---candidate----:", candidate)
+	// 			matches := false
+	// 			for _, val := range negativeValues {
+	// 				matched, _ := path.Match(val, candidate)
+	// 				if matched {
+	// 					matches = true
+	// 				}
+	// 			}
+	// 			if !matches {
+	// 				shortList = append(shortList, candidate)
+	// 			}
+	// 		}
+
+	// 		fmt.Println("---shortList----:", shortList)
+
+	// 		if len(positiveValues) == 0 {
+	// 			return true, nil
+	// 		}
+
+	// 		for _, short := range shortList {
+	// 			for _, val := range positiveValues {
+	// 				if !strings.HasPrefix(val, "!") {
+	// 					matched, _ := path.Match(val, short)
+	// 					if matched {
+	// 						return true, nil
+	// 					}
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+
+	// 	return false, nil
+	// }
+
 	return func(img *Image) (bool, error) {
-		if lookedUp != nil {
-			if lookedUp.ID() == img.ID() {
-				return true, nil
+		// If valueList is empty, return true
+		if len(valueList) == 0 {
+			return true, nil
+		}
+
+		for _, value := range valueList {
+			fmt.Println("--value----:", value)
+			isNegative := false
+			if strings.HasPrefix(value, "!") {
+				isNegative = true
+				value = value[1:]
+			}
+
+			lookedUp, _, _ := r.LookupImage(value, nil)
+			if lookedUp != nil && lookedUp.ID() == img.ID() {
+				if !isNegative {
+					return true, nil
+				} else {
+					return false, nil
+				}
 			}
 		}
 
@@ -289,36 +408,89 @@ func filterReferences(r *Runtime, value string) filterFunc {
 			refString := ref.String() // FQN with tag/digest
 			candidates := []string{refString}
 
-			// Split the reference into 3 components (twice if digested/tagged):
-			// 1) Fully-qualified reference
-			// 2) Without domain
-			// 3) Without domain and path
 			if named, isNamed := ref.(reference.Named); isNamed {
 				candidates = append(candidates,
-					reference.Path(named),                           // path/name without tag/digest (Path() removes it)
-					refString[strings.LastIndex(refString, "/")+1:]) // name with tag/digest
+					reference.Path(named),
+					refString[strings.LastIndex(refString, "/")+1:])
 
 				trimmedString := reference.TrimNamed(named).String()
 				if refString != trimmedString {
 					tagOrDigest := refString[len(trimmedString):]
 					candidates = append(candidates,
-						trimmedString,                     // FQN without tag/digest
-						reference.Path(named)+tagOrDigest, // path/name with tag/digest
-						trimmedString[strings.LastIndex(trimmedString, "/")+1:]) // name without tag/digest
+						trimmedString,
+						reference.Path(named)+tagOrDigest,
+						trimmedString[strings.LastIndex(trimmedString, "/")+1:])
 				}
 			}
 
 			for _, candidate := range candidates {
-				// path.Match() is also used by Docker's reference.FamiliarMatch().
-				matched, _ := path.Match(value, candidate)
-				if matched {
-					return true, nil
+				for _, val := range valueList {
+					if strings.HasPrefix(val, "!") {
+						val = val[1:]
+						matched, _ := path.Match(val, candidate)
+						if matched {
+							return false, nil
+						}
+					} else {
+						matched, _ := path.Match(val, candidate)
+						if matched {
+							return true, nil
+						}
+					}
 				}
 			}
 		}
 
 		return false, nil
 	}
+
+	// lookedUp, _, _ := r.LookupImage(value, nil)
+	// return func(img *Image) (bool, error) {
+	// 	if lookedUp != nil {
+	// 		if lookedUp.ID() == img.ID() {
+	// 			return true, nil
+	// 		}
+	// 	}
+
+	// 	refs, err := img.NamesReferences()
+	// 	if err != nil {
+	// 		return false, err
+	// 	}
+
+	// 	for _, ref := range refs {
+	// 		refString := ref.String() // FQN with tag/digest
+	// 		candidates := []string{refString}
+
+	// 		// Split the reference into 3 components (twice if digested/tagged):
+	// 		// 1) Fully-qualified reference
+	// 		// 2) Without domain
+	// 		// 3) Without domain and path
+	// 		if named, isNamed := ref.(reference.Named); isNamed {
+	// 			candidates = append(candidates,
+	// 				reference.Path(named),                           // path/name without tag/digest (Path() removes it)
+	// 				refString[strings.LastIndex(refString, "/")+1:]) // name with tag/digest
+
+	// 			trimmedString := reference.TrimNamed(named).String()
+	// 			if refString != trimmedString {
+	// 				tagOrDigest := refString[len(trimmedString):]
+	// 				candidates = append(candidates,
+	// 					trimmedString,                     // FQN without tag/digest
+	// 					reference.Path(named)+tagOrDigest, // path/name with tag/digest
+	// 					trimmedString[strings.LastIndex(trimmedString, "/")+1:]) // name without tag/digest
+	// 			}
+	// 		}
+
+	// 		for _, candidate := range candidates {
+	// 			// path.Match() is also used by Docker's reference.FamiliarMatch().
+	// 			matched, _ := path.Match(value, candidate)
+	// 			if matched {
+	// 				return true, nil
+	// 			}
+	// 		}
+	// 	}
+
+	// 	return false, nil
+	// }
 }
 
 // filterLabel creates a label for matching the specified value.

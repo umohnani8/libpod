@@ -48,6 +48,16 @@ func FiltersFromRequest(r *http.Request) ([]string, error) {
 		filters       map[string][]string
 		raw           []byte
 	)
+	fmt.Println("---method--:", r.Method)
+	fmt.Println("----url-----:", r.URL.Fragment, "------", r.URL.Host, "-----", r.URL.Opaque, "-------", r.URL.Path, "-------", r.URL.RawFragment, "-------", r.URL.RawPath, "-----", r.URL.RawQuery, "----", r.URL.Scheme, "----", r.URL.User)
+	fmt.Println("----header-----:", r.Header)
+	fmt.Println("---form----:", r.Form.Get("filters"))
+
+	// req := http.Request{
+	// 	URL: &url.URL{
+	// 		RawQuery: "all=false&filters=%7B%22label%22%3A%5B%22xyz%3Dbar%22%2C%22abc%22%5D%2C%22reference%22%3A%5B%22test%22%5D%7D",
+	// 	},
+	// }
 
 	if _, found := r.URL.Query()["filters"]; found {
 		raw = []byte(r.Form.Get("filters"))
