@@ -61,11 +61,12 @@ func (r *ConmonOCIRuntime) Attach(c *Container, params *AttachOptions) error {
 		logrus.Debugf("Attaching to container %s", c.ID())
 
 		// If we have a resize, do it.
-		if params.InitialSize != nil {
-			if err := r.AttachResize(c, *params.InitialSize); err != nil {
-				return err
-			}
-		}
+		// if params.InitialSize != nil {
+		// 	if err := r.AttachResize(c, *params.InitialSize); err != nil {
+		// 		return err
+		// 	}
+		// }
+		registerResizeFunc(params.InitialSize, c.bundlePath())
 
 		attachSock, err := c.AttachSocketPath()
 		if err != nil {

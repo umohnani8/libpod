@@ -725,7 +725,9 @@ func (c *Container) removeConmonFiles() error {
 	// Files are allowed to not exist, so ignore ENOENT
 	attachFile, err := c.AttachSocketPath()
 	if err != nil {
-		return fmt.Errorf("failed to get attach socket path for container %s: %w", c.ID(), err)
+		// return fmt.Errorf("failed to get attach socket path for container %s: %w", c.ID(), err)
+		// TODO: don't ignore this error
+		fmt.Printf("failed to get attach socket path for container %s: %s", c.ID(), err)
 	}
 
 	if err := os.Remove(attachFile); err != nil && !os.IsNotExist(err) {

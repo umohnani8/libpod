@@ -168,7 +168,7 @@ type AttachOptions struct {
 	DetachKeys *string
 	// InitialSize is the initial size of the terminal. Set before the
 	// attach begins.
-	InitialSize *resize.TerminalSize
+	InitialSize <-chan resize.TerminalSize
 	// AttachReady signals when the attach has successfully completed and
 	// streaming has begun.
 	AttachReady chan<- bool
