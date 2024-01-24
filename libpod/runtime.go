@@ -495,26 +495,36 @@ func makeRuntime(ctx context.Context, runtime *Runtime) (retErr error) {
 	runtime.ociRuntimes = make(map[string]OCIRuntime)
 
 	// Initialize remaining OCI runtimes
+	fmt.Println("-----runtimes----:", runtime.config.Engine.OCIRuntimes)
 	for name, paths := range runtime.config.Engine.OCIRuntimes {
-		ociRuntime, err := newConmonOCIRuntime(name, paths, runtime.conmonPath, runtime.runtimeFlags, runtime.config)
+		ociRuntime, err := newConmonRSOCIRuntime(name, paths, runtime.conmonPath, runtime.runtimeFlags, runtime.config, runtime)
 		if err != nil {
 			// Don't fatally error.
 			// This will allow us to ship configs including optional
 			// runtimes that might not be installed (crun, kata).
 			// Only an infof so default configs don't spec errors.
-			logrus.Debugf("Configured OCI runtime %s initialization failed: %v", name, err)
+			logrus.Debugf("Configured OCI runtime %s initialization failed (with conmon-rs): %v", name, err)
 			continue
 		}
 
-		runtime.ociRuntimes[name] = ociRuntime
+		runtime.ociRuntimes["conmon-rs:"+name] = ociRuntime
 	}
 
+	fmt.Println("----ociruntime----:", runtime.config.Engine.OCIRuntime)
+	if !strings.HasPrefix(runtime.config.Engine.OCIRuntime, "conmon-rs:") {
+		runtime.config.Engine.OCIRuntime = "conmon-rs:" + runtime.config.Engine.OCIRuntime
+	}
+	fmt.Println("----ociruntime 2----:", runtime.config.Engine.OCIRuntime)
 	// Do we have a default OCI runtime?
 	if runtime.config.Engine.OCIRuntime != "" {
+		fmt.Println("---runtimes----:", runtime.ociRuntimes)
+		fmt.Println("---conmon path---:", runtime.conmonPath)
+		fmt.Println("---runtime flags---:", runtime.runtimeFlags)
+		// fmt.Println("---runtime config----:", runtime.config)
 		// If the string starts with / it's a path to a runtime
 		// executable.
 		if strings.HasPrefix(runtime.config.Engine.OCIRuntime, "/") {
-			ociRuntime, err := newConmonOCIRuntime(runtime.config.Engine.OCIRuntime, []string{runtime.config.Engine.OCIRuntime}, runtime.conmonPath, runtime.runtimeFlags, runtime.config)
+			ociRuntime, err := newConmonRSOCIRuntime(runtime.config.Engine.OCIRuntime, []string{runtime.config.Engine.OCIRuntime}, runtime.conmonPath, runtime.runtimeFlags, runtime.config, runtime)
 			if err != nil {
 				return err
 			}

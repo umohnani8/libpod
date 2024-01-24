@@ -181,6 +181,7 @@ func (c *Container) StartAndAttach(ctx context.Context, streams *define.AttachSt
 		opts.DetachKeys = &keys
 		opts.Start = true
 		opts.Started = startedChan
+		opts.InitialSize = resize
 
 		if err := c.ociRuntime.Attach(c, opts); err != nil {
 			attachChan <- err
