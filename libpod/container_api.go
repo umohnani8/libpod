@@ -196,6 +196,7 @@ func (c *Container) StartAndAttach(ctx context.Context, streams *define.AttachSt
 		opts.DetachKeys = &keys
 		opts.Start = true
 		opts.Started = startedChan
+		opts.InitialSize = resize
 
 		// attach and start the container on a different thread.  waitForHealthy must
 		// be done later, as it requires to run on the same thread that holds the lock

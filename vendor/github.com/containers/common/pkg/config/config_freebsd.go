@@ -1,5 +1,3 @@
-//go:build (freebsd || netbsd || openbsd)
-
 package config
 
 const (

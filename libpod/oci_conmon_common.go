@@ -183,6 +183,7 @@ func hasCurrentUserMapped(ctr *Container) bool {
 
 // CreateContainer creates a container.
 func (r *ConmonOCIRuntime) CreateContainer(ctr *Container, restoreOptions *ContainerCheckpointOptions) (int64, error) {
+	fmt.Println("******in conmon create*****")
 	if !hasCurrentUserMapped(ctr) {
 		// if we are running a non privileged container, be sure to umount some kernel paths so they are not
 		// bind mounted inside the container at all.

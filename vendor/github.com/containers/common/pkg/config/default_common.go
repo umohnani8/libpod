@@ -1,4 +1,4 @@
-//go:build !freebsd && !netbsd
+//go:build !freebsd
 
 package config
 

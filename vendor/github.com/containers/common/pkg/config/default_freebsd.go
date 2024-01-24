@@ -1,5 +1,3 @@
-//go:build (freebsd || netbsd || openbsd)
-
 package config
 
 // DefaultInitPath is the default path to the container-init binary.
