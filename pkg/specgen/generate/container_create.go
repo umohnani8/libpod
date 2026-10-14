@@ -24,6 +24,8 @@ import (
 	"go.podman.io/common/libimage"
 	"go.podman.io/common/libnetwork/pasta"
 	"go.podman.io/common/libnetwork/slirp4netns"
+	"go.podman.io/common/pkg/libartifact"
+	libartTypes "go.podman.io/common/pkg/libartifact/types"
 	"tags.cncf.io/container-device-interface/pkg/parser"
 )
 
@@ -233,7 +235,7 @@ func MakeContainer(ctx context.Context, rt *libpod.Runtime, s *specgen.SpecGener
 	command := makeCommand(s, imageData)
 
 	infraVol := len(compatibleOptions.Mounts) > 0 || len(compatibleOptions.Volumes) > 0 || len(compatibleOptions.ImageVolumes) > 0 || len(compatibleOptions.OverlayVolumes) > 0
-	opts, err := createContainerOptions(rt, s, pod, finalVolumes, finalOverlays, imageData, command, infraVol, *compatibleOptions)
+	opts, err := createContainerOptions(ctx, rt, s, pod, finalVolumes, finalOverlays, imageData, command, infraVol, *compatibleOptions)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -354,7 +356,7 @@ func isCDIDevice(device string) bool {
 	return parser.IsQualifiedName(device)
 }
 
-func createContainerOptions(rt *libpod.Runtime, s *specgen.SpecGenerator, pod *libpod.Pod, volumes []*specgen.NamedVolume, overlays []*specgen.OverlayVolume, imageData *libimage.ImageData, command []string, infraVolumes bool, compatibleOptions libpod.InfraInherit) ([]libpod.CtrCreateOption, error) {
+func createContainerOptions(ctx context.Context, rt *libpod.Runtime, s *specgen.SpecGenerator, pod *libpod.Pod, volumes []*specgen.NamedVolume, overlays []*specgen.OverlayVolume, imageData *libimage.ImageData, command []string, infraVolumes bool, compatibleOptions libpod.InfraInherit) ([]libpod.CtrCreateOption, error) {
 	var options []libpod.CtrCreateOption
 	var err error
 
@@ -512,8 +514,24 @@ func createContainerOptions(rt *libpod.Runtime, s *specgen.SpecGenerator, pod *l
 	}
 
 	if len(s.ArtifactVolumes) != 0 {
+		artStore, err := rt.ArtifactStore()
+		if err != nil {
+			return nil, err
+		}
 		vols := make([]*libpod.ContainerArtifactVolume, 0, len(s.ArtifactVolumes))
 		for _, v := range s.ArtifactVolumes {
+			asr, err := libartifact.NewArtifactStorageReference(v.Source)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := artStore.BlobMountPaths(ctx, asr, &libartTypes.BlobMountPathOptions{
+				FilterBlobOptions: libartTypes.FilterBlobOptions{
+					Title:  v.Title,
+					Digest: v.Digest,
+				},
+			}); err != nil {
+				return nil, fmt.Errorf("validating artifact volume %q: %w", v.Source, err)
+			}
 			vols = append(vols, &libpod.ContainerArtifactVolume{
 				Dest:   v.Destination,
 				Source: v.Source,

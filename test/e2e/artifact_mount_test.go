@@ -203,6 +203,28 @@ var _ = Describe("Podman artifact mount", func() {
 		Expect(session.OutputToString()).To(Equal("hello world second file"))
 	})
 
+	It("podman create with nonexistent artifact fails at creation", func() {
+		session := podmanTest.Podman([]string{"create", "--name", "should-not-exist", "--mount", "type=artifact,src=nonexistent-artifact,dst=/data", ALPINE, "echo", "hello"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).To(ExitWithError(125, "artifact does not exist"))
+
+		// Container should not have been created
+		session = podmanTest.Podman([]string{"container", "exists", "should-not-exist"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).To(ExitWithError(1, ""))
+	})
+
+	It("podman run with nonexistent artifact fails at creation", func() {
+		session := podmanTest.Podman([]string{"run", "--name", "should-not-exist", "--mount", "type=artifact,src=nonexistent-artifact,dst=/data", ALPINE, "echo", "hello"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).To(ExitWithError(125, "artifact does not exist"))
+
+		// Container should not have been created
+		session = podmanTest.Podman([]string{"container", "exists", "should-not-exist"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).To(ExitWithError(1, ""))
+	})
+
 	It("podman artifact mount dest conflict", func() {
 		tests := []struct {
 			name  string
